@@ -25,6 +25,7 @@ export interface UploadItem {
 
 interface UploadZoneProps {
   uploads: UploadItem[];
+  currentPrefix: string;
   onUploadStart: (id: string, name: string, size: number) => void;
   onUploadProgress: (id: string, progress: number) => void;
   onUploadComplete: (id: string) => void;
@@ -103,9 +104,10 @@ async function withConcurrency<T>(
 
 async function uploadSingle(
   file: File,
+  prefix: string,
   onProgress: (pct: number) => void
 ): Promise<void> {
-  const key = file.name;
+  const key = `${prefix}${file.name}`;
   const contentType = file.type || "application/octet-stream";
   const { url } = await getUploadUrl(key, contentType, file.size);
   await xhrPut(url, file, onProgress);
@@ -113,9 +115,10 @@ async function uploadSingle(
 
 async function uploadMultipart(
   file: File,
+  prefix: string,
   onProgress: (pct: number) => void
 ): Promise<void> {
-  const key = file.name;
+  const key = `${prefix}${file.name}`;
   const contentType = file.type || "application/octet-stream";
   const numParts = Math.ceil(file.size / PART_SIZE);
 
@@ -162,6 +165,7 @@ async function uploadMultipart(
 
 export function UploadZone({
   uploads,
+  currentPrefix,
   onUploadStart,
   onUploadProgress,
   onUploadComplete,
@@ -174,8 +178,8 @@ export function UploadZone({
         onUploadStart(id, file.name, file.size);
 
         const run = file.size <= SINGLE_UPLOAD_THRESHOLD
-          ? uploadSingle(file, (pct) => onUploadProgress(id, pct))
-          : uploadMultipart(file, (pct) => onUploadProgress(id, pct));
+          ? uploadSingle(file, currentPrefix, (pct) => onUploadProgress(id, pct))
+          : uploadMultipart(file, currentPrefix, (pct) => onUploadProgress(id, pct));
 
         run
           .then(() => onUploadComplete(id))
@@ -185,7 +189,7 @@ export function UploadZone({
           });
       }
     },
-    [onUploadStart, onUploadProgress, onUploadComplete, onUploadError]
+    [currentPrefix, onUploadStart, onUploadProgress, onUploadComplete, onUploadError]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

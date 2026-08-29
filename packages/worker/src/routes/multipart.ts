@@ -7,15 +7,18 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { createS3Client } from "../lib/s3";
-import type { Env } from "../types";
+import type { Env, UserContext } from "../types";
+
+type Variables = { user: UserContext };
 
 const PART_PRESIGN_EXPIRY_SECONDS = 1800; // 30 minutes — just-in-time fetched per part
 const MAX_PART_NUMBER = 10_000;
 const MAX_PART_BYTES = 5 * 1024 * 1024 * 1024 - 5 * 1024 * 1024; // ~4.995 GiB
 
-export const multipartRouter = new Hono<{ Bindings: Env }>();
+export const multipartRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 multipartRouter.post("/multipart/init", async (c) => {
+  const user = c.get("user");
   const body = await c.req.json<{ key?: string; contentType?: string }>();
   const { key, contentType } = body;
 
@@ -23,11 +26,12 @@ multipartRouter.post("/multipart/init", async (c) => {
     return c.json({ error: "key and contentType are required" }, 400);
   }
 
+  const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
   const result = await s3.send(
     new CreateMultipartUploadCommand({
       Bucket: c.env.R2_BUCKET_NAME,
-      Key: key,
+      Key: r2Key,
       ContentType: contentType,
     })
   );
@@ -36,6 +40,7 @@ multipartRouter.post("/multipart/init", async (c) => {
 });
 
 multipartRouter.post("/multipart/part-url", async (c) => {
+  const user = c.get("user");
   const body = await c.req.json<{
     key?: string;
     uploadId?: string;
@@ -56,12 +61,13 @@ multipartRouter.post("/multipart/part-url", async (c) => {
     return c.json({ error: "Part size exceeds the ~4.995 GiB R2 limit" }, 400);
   }
 
+  const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
   const url = await getSignedUrl(
     s3,
     new UploadPartCommand({
       Bucket: c.env.R2_BUCKET_NAME,
-      Key: key,
+      Key: r2Key,
       UploadId: uploadId,
       PartNumber: partNumber,
     }),
@@ -72,6 +78,7 @@ multipartRouter.post("/multipart/part-url", async (c) => {
 });
 
 multipartRouter.post("/multipart/complete", async (c) => {
+  const user = c.get("user");
   const body = await c.req.json<{
     key?: string;
     uploadId?: string;
@@ -83,11 +90,12 @@ multipartRouter.post("/multipart/complete", async (c) => {
     return c.json({ error: "key, uploadId, and parts are required" }, 400);
   }
 
+  const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
   const result = await s3.send(
     new CompleteMultipartUploadCommand({
       Bucket: c.env.R2_BUCKET_NAME,
-      Key: key,
+      Key: r2Key,
       UploadId: uploadId,
       MultipartUpload: {
         Parts: parts.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
@@ -99,6 +107,7 @@ multipartRouter.post("/multipart/complete", async (c) => {
 });
 
 multipartRouter.delete("/multipart/abort", async (c) => {
+  const user = c.get("user");
   const body = await c.req.json<{ key?: string; uploadId?: string }>();
   const { key, uploadId } = body;
 
@@ -106,11 +115,12 @@ multipartRouter.delete("/multipart/abort", async (c) => {
     return c.json({ error: "key and uploadId are required" }, 400);
   }
 
+  const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
   await s3.send(
     new AbortMultipartUploadCommand({
       Bucket: c.env.R2_BUCKET_NAME,
-      Key: key,
+      Key: r2Key,
       UploadId: uploadId,
     })
   );

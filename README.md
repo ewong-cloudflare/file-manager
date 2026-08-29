@@ -32,7 +32,13 @@ Browser → R2 (direct PUT via presigned URL — Worker never proxies file data)
 wrangler r2 bucket create my-files
 ```
 
-> Update `bucket_name` in `packages/worker/wrangler.toml` to match.
+Update `bucket_name` and `binding` in `packages/worker/wrangler.toml` to match:
+
+```toml
+[[r2_buckets]]
+binding = "my_files"
+bucket_name = "my-files"
+```
 
 ---
 
@@ -44,16 +50,16 @@ wrangler r2 bucket create my-files
 
 ---
 
-## 3. Apply CORS Policy to R2
+## 3. Deploy
 
-Edit `cors-policy.json` to replace `your-custom-domain.com` with your actual domain (or `*.workers.dev` for testing).
+Build the UI and deploy the Worker. **This must happen before setting secrets** — wrangler can only attach secrets to an existing Worker.
 
 ```bash
-# Apply CORS rules to R2 bucket (wrangler 3.x+)
-wrangler r2 bucket cors put my-files --file cors-policy.json
+# From monorepo root
+npm run deploy
 ```
 
-> **Important:** The `ExposeHeaders: ["ETag"]` entry is required so the browser can read part ETags during multipart uploads.
+On first deploy, wrangler automatically runs the Durable Object migration defined in `[[migrations]]`, provisioning the `DownloadTokenDO` class.
 
 ---
 
@@ -70,6 +76,11 @@ wrangler secret put R2_BUCKET_NAME       # same as bucket_name in wrangler.toml
 wrangler secret put CF_ACCESS_AUD        # CF Access AUD tag (when ready)
 ```
 
+Verify with:
+```bash
+wrangler secret list
+```
+
 For **local development**, copy `.dev.vars.example` to `.dev.vars` and fill in the values:
 
 ```bash
@@ -79,7 +90,34 @@ cp .dev.vars.example .dev.vars
 
 ---
 
-## 5. Local Development
+## 5. Apply CORS Policy to R2
+
+Edit `cors-policy.json` to set `AllowedOrigins` to your actual domain. The file uses R2's native format:
+
+```json
+{
+  "rules": [{
+    "allowed": {
+      "origins": ["https://your-domain.com"],
+      "methods": ["PUT", "GET"],
+      "headers": ["Content-Type", "Content-Length", "x-amz-*"]
+    },
+    "exposeHeaders": ["ETag"],
+    "maxAgeSeconds": 3600
+  }]
+}
+```
+
+```bash
+# Run from monorepo root
+wrangler r2 bucket cors set my-files --file cors-policy.json
+```
+
+> **Important:** `exposeHeaders: ["ETag"]` is required so the browser can read part ETags during multipart uploads.
+
+---
+
+## 6. Local Development
 
 Run the Worker API and the Vite dev server in two terminals:
 
@@ -100,18 +138,7 @@ npm run dev
 # /api requests are proxied to http://localhost:8787
 ```
 
-> **Note:** On first local run, wrangler will create a local simulation of the R2 bucket and Durable Object. Presigned URLs (which use R2's S3 API) still require real credentials in `.dev.vars`.
-
----
-
-## 6. Deploy
-
-```bash
-# From monorepo root — builds UI then deploys Worker (which includes UI assets)
-npm run deploy
-```
-
-On first deploy, wrangler automatically runs the Durable Object migration defined in `[[migrations]]`.
+> **Note:** On first local run, wrangler creates a local simulation of the R2 bucket and Durable Object. Presigned URLs (which use R2's S3 API) still require real credentials in `.dev.vars`.
 
 ---
 

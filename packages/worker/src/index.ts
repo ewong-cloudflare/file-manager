@@ -4,11 +4,15 @@ import { authMiddleware } from "./middleware/auth";
 import { filesRouter } from "./routes/files";
 import { downloadRouter } from "./routes/download";
 import { multipartRouter } from "./routes/multipart";
-import type { Env } from "./types";
+import { meRouter } from "./routes/me";
+import { sharesRouter } from "./routes/shares";
+import type { Env, UserContext } from "./types";
 
 export { DownloadTokenDO } from "./durable-objects/DownloadTokenDO";
 
-const app = new Hono<{ Bindings: Env }>();
+type Variables = { user: UserContext };
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use(
   "/api/*",
@@ -21,9 +25,11 @@ app.use(
 
 app.use("/api/*", authMiddleware);
 
+app.route("/api", meRouter);
 app.route("/api", filesRouter);
 app.route("/api", downloadRouter);
 app.route("/api", multipartRouter);
+app.route("/api", sharesRouter);
 
 app.all("*", (c) => {
   return c.env.ASSETS.fetch(c.req.raw);

@@ -6,8 +6,10 @@ import {
   Music,
   Archive,
   File,
+  Folder,
   Trash2,
   RefreshCw,
+  Share2,
 } from "lucide-react";
 import type { FileItem } from "../lib/api";
 
@@ -17,12 +19,15 @@ interface FileListProps {
   onDownload: (key: string) => void;
   onDelete: (key: string) => void;
   onRefresh: () => void;
+  onNavigate: (prefix: string) => void;
+  onShare: (key: string, isFolder: boolean) => void;
   downloadingKey: string | null;
   deletingKey: string | null;
 }
 
-function fileIcon(key: string) {
-  const ext = key.split(".").pop()?.toLowerCase() ?? "";
+function fileIcon(entry: FileItem) {
+  if (entry.type === "folder") return <Folder className="w-4 h-4 text-amber-400" />;
+  const ext = entry.key.split(".").pop()?.toLowerCase() ?? "";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext))
     return <Image className="w-4 h-4 text-violet-500" />;
   if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext))
@@ -54,12 +59,19 @@ function formatDate(iso: string): string {
   });
 }
 
+function displayName(key: string): string {
+  const parts = key.replace(/\/$/, "").split("/");
+  return parts[parts.length - 1] ?? key;
+}
+
 export function FileList({
   files,
   loading,
   onDownload,
   onDelete,
   onRefresh,
+  onNavigate,
+  onShare,
   downloadingKey,
   deletingKey,
 }: FileListProps) {
@@ -67,10 +79,10 @@ export function FileList({
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
         <h2 className="text-sm font-semibold text-slate-700">
-          Files
+          Files &amp; Folders
           {!loading && (
             <span className="ml-2 text-xs font-normal text-slate-400">
-              {files.length} object{files.length !== 1 ? "s" : ""}
+              {files.length} item{files.length !== 1 ? "s" : ""}
             </span>
           )}
         </h2>
@@ -98,8 +110,8 @@ export function FileList({
         </div>
       ) : files.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-          <File className="w-10 h-10 mb-3 opacity-30" />
-          <p className="text-sm">No files uploaded yet</p>
+          <Folder className="w-10 h-10 mb-3 opacity-30" />
+          <p className="text-sm">This folder is empty</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -113,47 +125,64 @@ export function FileList({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {files.map((file) => (
+              {files.map((entry) => (
                 <tr
-                  key={file.key}
+                  key={entry.key}
                   className="hover:bg-slate-50 transition-colors group"
                 >
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      {fileIcon(file.key)}
-                      <span
-                        className="truncate text-slate-700 font-medium"
-                        title={file.key}
-                      >
-                        {file.key}
-                      </span>
+                      {fileIcon(entry)}
+                      {entry.type === "folder" ? (
+                        <button
+                          onClick={() => onNavigate(entry.key)}
+                          className="truncate text-slate-700 font-medium hover:text-blue-600 transition-colors text-left"
+                          title={entry.key}
+                        >
+                          {displayName(entry.key)}
+                        </button>
+                      ) : (
+                        <span className="truncate text-slate-700 font-medium" title={entry.key}>
+                          {displayName(entry.key)}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-right text-slate-500 whitespace-nowrap tabular-nums">
-                    {formatSize(file.size)}
+                    {entry.type === "folder" ? "—" : formatSize(entry.size ?? 0)}
                   </td>
                   <td className="px-5 py-3.5 text-slate-400 whitespace-nowrap text-xs">
-                    {formatDate(file.lastModified)}
+                    {entry.lastModified ? formatDate(entry.lastModified) : "—"}
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={() => onDownload(file.key)}
-                        disabled={downloadingKey === file.key}
-                        title="Generate one-time download link"
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                        onClick={() => onShare(entry.key, entry.type === "folder")}
+                        title="Share"
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
                       >
-                        <Download className="w-3.5 h-3.5" />
-                        {downloadingKey === file.key ? "…" : "Download"}
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Share</span>
                       </button>
+                      {entry.type === "file" && (
+                        <button
+                          onClick={() => onDownload(entry.key)}
+                          disabled={downloadingKey === entry.key}
+                          title="Generate one-time download link"
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          {downloadingKey === entry.key ? "…" : "Download"}
+                        </button>
+                      )}
                       <button
-                        onClick={() => onDelete(file.key)}
-                        disabled={deletingKey === file.key}
-                        title="Delete file"
+                        onClick={() => onDelete(entry.key)}
+                        disabled={deletingKey === entry.key}
+                        title={entry.type === "folder" ? "Delete folder" : "Delete file"}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        {deletingKey === file.key ? "…" : "Delete"}
+                        {deletingKey === entry.key ? "…" : "Delete"}
                       </button>
                     </div>
                   </td>

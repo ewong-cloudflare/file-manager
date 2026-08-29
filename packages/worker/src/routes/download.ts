@@ -2,13 +2,16 @@ import { Hono } from "hono";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client } from "../lib/s3";
-import type { Env } from "../types";
+import type { Env, UserContext } from "../types";
+
+type Variables = { user: UserContext };
 
 const REDIRECT_EXPIRY_SECONDS = 30; // short-lived redirect after token consumption
 
-export const downloadRouter = new Hono<{ Bindings: Env }>();
+export const downloadRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 downloadRouter.post("/download-token", async (c) => {
+  const user = c.get("user");
   const body = await c.req.json<{ key?: string }>();
   const { key } = body;
 
@@ -16,6 +19,7 @@ downloadRouter.post("/download-token", async (c) => {
     return c.json({ error: "key is required" }, 400);
   }
 
+  const r2Key = `${user.email}/${key}`;
   const token = crypto.randomUUID();
   const id = c.env.DOWNLOAD_TOKENS.idFromName(token);
   const stub = c.env.DOWNLOAD_TOKENS.get(id);
@@ -24,7 +28,7 @@ downloadRouter.post("/download-token", async (c) => {
     new Request("https://do/init", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key: r2Key }),
     })
   );
 

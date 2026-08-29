@@ -1,21 +1,40 @@
 import { createMiddleware } from "hono/factory";
-import type { Env } from "../types";
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import type { Env, UserContext } from "../types";
 
-export const authMiddleware = createMiddleware<{ Bindings: Env }>(
+type Variables = { user: UserContext };
+
+let cachedJWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJWKS(teamDomain: string) {
+  if (!cachedJWKS) {
+    cachedJWKS = createRemoteJWKSet(
+      new URL(`https://${teamDomain}/cdn-cgi/access/certs`)
+    );
+  }
+  return cachedJWKS;
+}
+
+export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Variables }>(
   async (c, next) => {
-    // TODO: Replace with real Cloudflare Access JWT validation once CF_ACCESS_AUD is provided.
-    // Production implementation should:
-    //   1. Extract the `CF-Access-Jwt-Assertion` header
-    //   2. Fetch JWKS from https://<team>.cloudflareaccess.com/cdn-cgi/access/certs
-    //   3. Verify the JWT signature and aud claim against c.env.CF_ACCESS_AUD
-    //   4. Return 401 on failure
+    const token = c.req.header("CF-Access-Jwt-Assertion");
+    if (!token) {
+      return c.json({ error: "Unauthorized — missing CF Access JWT" }, 401);
+    }
 
-    if (c.env.ENVIRONMENT === "production") {
-      const jwtAssertion = c.req.header("CF-Access-Jwt-Assertion");
-      if (!jwtAssertion) {
-        return c.json({ error: "Unauthorized — missing CF Access JWT" }, 401);
-      }
-      // Mock-pass for now; swap with real validation above when AUD is ready.
+    try {
+      const JWKS = getJWKS(c.env.CF_TEAM_DOMAIN);
+      const { payload } = await jwtVerify(token, JWKS, {
+        audience: c.env.CF_ACCESS_AUD,
+      });
+
+      c.set("user", {
+        email: (payload.email as string) ?? "",
+        name: (payload.name as string) ?? (payload.email as string) ?? "",
+        sub: payload.sub ?? "",
+      });
+    } catch {
+      return c.json({ error: "Unauthorized — invalid CF Access JWT" }, 401);
     }
 
     await next();

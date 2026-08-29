@@ -8,8 +8,8 @@ directory = "../ui/dist"
 binding = "ASSETS"
 
 [[r2_buckets]]
-binding = "FILES"
-bucket_name = "your-r2-bucket"
+binding = "my_files"
+bucket_name = "my-files"
 
 [[durable_objects.bindings]]
 name = "DOWNLOAD_TOKENS"
@@ -19,12 +19,18 @@ class_name = "DownloadTokenDO"
 tag = "v1"
 new_classes = ["DownloadTokenDO"]
 
+[[d1_databases]]
+binding     = "DB"
+database_name = "file-manager-shares"
+database_id   = "04fb5893-dd4d-4697-af3f-ace5f4bc4304"
+
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 
 # Secrets — set these via `wrangler secret put <NAME>`:
-#   R2_ACCOUNT_ID       — your Cloudflare account ID
-#   R2_ACCESS_KEY_ID    — R2 API token access key
+#   R2_ACCOUNT_ID        — your Cloudflare account ID
+#   R2_ACCESS_KEY_ID     — R2 API token access key
 #   R2_SECRET_ACCESS_KEY — R2 API token secret key
-#   R2_BUCKET_NAME      — same as bucket_name above
-#   CF_ACCESS_AUD       — Cloudflare Access application AUD tag (when ready)
+#   R2_BUCKET_NAME       — same as bucket_name above
+#   CF_ACCESS_AUD        — Cloudflare Access application AUD tag
+#   CF_TEAM_DOMAIN       — e.g. acmecorp.cloudflareaccess.com

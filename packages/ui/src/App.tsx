@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { HardDrive, AlertCircle, X, CheckCircle2 } from "lucide-react";
+import { AlertCircle, X, CheckCircle2 } from "lucide-react";
 import { UploadZone } from "./components/UploadZone";
 import { FileList } from "./components/FileList";
-import { getDownloadToken, deleteFile, listFiles } from "./lib/api";
-import type { FileItem } from "./lib/api";
+import { Header } from "./components/Header";
+import { Breadcrumb } from "./components/Breadcrumb";
+import { ShareModal } from "./components/ShareModal";
+import { SharedWithMe } from "./components/SharedWithMe";
+import { getDownloadToken, deleteFile, listFiles, getMe } from "./lib/api";
+import type { FileItem, UserInfo } from "./lib/api";
 import type { UploadItem } from "./components/UploadZone";
 
 interface Toast {
@@ -12,13 +16,24 @@ interface Toast {
   type: "success" | "error";
 }
 
+type Tab = "myfiles" | "shared";
+
+interface ShareTarget {
+  key: string;
+  isFolder: boolean;
+}
+
 export default function App() {
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [currentPrefix, setCurrentPrefix] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("myfiles");
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
 
   const addToast = useCallback((message: string, type: Toast["type"]) => {
     const id = crypto.randomUUID();
@@ -30,33 +45,36 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  useEffect(() => {
+    getMe().then(setUser).catch(() => {});
+  }, []);
+
   const fetchFiles = useCallback(async () => {
     setFilesLoading(true);
     try {
-      const { files: fetched } = await listFiles();
-      setFiles(fetched);
+      const { entries } = await listFiles(currentPrefix);
+      setFiles(entries);
     } catch {
       addToast("Failed to load file list", "error");
     } finally {
       setFilesLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, currentPrefix]);
 
   useEffect(() => {
     void fetchFiles();
   }, [fetchFiles]);
 
+  const handleNavigate = useCallback((prefix: string) => {
+    setCurrentPrefix(prefix);
+  }, []);
+
   const handleUploadStart = useCallback((id: string, name: string, size: number) => {
-    setUploads((prev) => [
-      ...prev,
-      { id, name, size, progress: 0, status: "uploading" },
-    ]);
+    setUploads((prev) => [...prev, { id, name, size, progress: 0, status: "uploading" }]);
   }, []);
 
   const handleUploadProgress = useCallback((id: string, progress: number) => {
-    setUploads((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, progress } : u))
-    );
+    setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, progress } : u)));
   }, []);
 
   const handleUploadComplete = useCallback(
@@ -64,9 +82,7 @@ export default function App() {
       setUploads((prev) =>
         prev.map((u) => (u.id === id ? { ...u, status: "complete", progress: 100 } : u))
       );
-      setTimeout(() => {
-        setUploads((prev) => prev.filter((u) => u.id !== id));
-      }, 2000);
+      setTimeout(() => setUploads((prev) => prev.filter((u) => u.id !== id)), 2000);
       void fetchFiles();
       addToast("File uploaded successfully", "success");
     },
@@ -75,9 +91,7 @@ export default function App() {
 
   const handleUploadError = useCallback(
     (id: string, error: string) => {
-      setUploads((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, status: "error", error } : u))
-      );
+      setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, status: "error", error } : u)));
       addToast(`Upload failed: ${error}`, "error");
     },
     [addToast]
@@ -104,10 +118,10 @@ export default function App() {
       setDeletingKey(key);
       try {
         await deleteFile(key);
-        addToast(`"${key}" deleted`, "success");
+        addToast(`Deleted successfully`, "success");
         void fetchFiles();
       } catch {
-        addToast("Failed to delete file", "error");
+        addToast("Failed to delete", "error");
       } finally {
         setDeletingKey(null);
       }
@@ -115,38 +129,73 @@ export default function App() {
     [fetchFiles, addToast]
   );
 
+  const handleShare = useCallback((key: string, isFolder: boolean) => {
+    setShareTarget({ key, isFolder });
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-blue-600 rounded-lg">
-            <HardDrive className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-semibold text-slate-800 text-sm">File Manager</span>
-          <span className="text-slate-300 text-sm">·</span>
-          <span className="text-xs text-slate-400">Cloudflare R2</span>
-        </div>
-      </header>
+      <Header user={user} />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
-        <UploadZone
-          uploads={uploads}
-          onUploadStart={handleUploadStart}
-          onUploadProgress={handleUploadProgress}
-          onUploadComplete={handleUploadComplete}
-          onUploadError={handleUploadError}
-        />
+        <div className="flex items-center gap-4 border-b border-slate-200 pb-0">
+          <button
+            onClick={() => setActiveTab("myfiles")}
+            className={`text-sm font-medium pb-3 border-b-2 transition-colors ${
+              activeTab === "myfiles"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Files
+          </button>
+          <button
+            onClick={() => setActiveTab("shared")}
+            className={`text-sm font-medium pb-3 border-b-2 transition-colors ${
+              activeTab === "shared"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Shared with me
+          </button>
+        </div>
 
-        <FileList
-          files={files}
-          loading={filesLoading}
-          onDownload={handleDownload}
-          onDelete={handleDelete}
-          onRefresh={fetchFiles}
-          downloadingKey={downloadingKey}
-          deletingKey={deletingKey}
-        />
+        {activeTab === "myfiles" ? (
+          <>
+            <Breadcrumb prefix={currentPrefix} onNavigate={handleNavigate} />
+            <UploadZone
+              uploads={uploads}
+              currentPrefix={currentPrefix}
+              onUploadStart={handleUploadStart}
+              onUploadProgress={handleUploadProgress}
+              onUploadComplete={handleUploadComplete}
+              onUploadError={handleUploadError}
+            />
+            <FileList
+              files={files}
+              loading={filesLoading}
+              onDownload={handleDownload}
+              onDelete={handleDelete}
+              onRefresh={fetchFiles}
+              onNavigate={handleNavigate}
+              onShare={handleShare}
+              downloadingKey={downloadingKey}
+              deletingKey={deletingKey}
+            />
+          </>
+        ) : (
+          <SharedWithMe onToast={addToast} />
+        )}
       </main>
+
+      {shareTarget && (
+        <ShareModal
+          itemKey={shareTarget.key}
+          isFolder={shareTarget.isFolder}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
 
       <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 pointer-events-none">
         {toasts.map((toast) => (

@@ -1,12 +1,13 @@
-[
-  {
-    "AllowedOrigins": [
-      "https://*.workers.dev",
-      "https://your-custom-domain.com"
-    ],
-    "AllowedMethods": ["PUT", "GET"],
-    "AllowedHeaders": ["Content-Type", "Content-Length", "x-amz-*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://files.acmecorp.work"],
+        "methods": ["PUT", "GET"],
+        "headers": ["Content-Type", "Content-Length", "x-amz-*"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

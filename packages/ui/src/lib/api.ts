@@ -1,10 +1,18 @@
 const API_BASE = "/api";
 
-export interface FileItem {
+export interface FileEntry {
   key: string;
-  size: number;
-  lastModified: string;
-  etag: string;
+  type: "file" | "folder";
+  size?: number;
+  lastModified?: string;
+  etag?: string;
+}
+
+export type FileItem = FileEntry;
+
+export interface UserInfo {
+  email: string;
+  name: string;
 }
 
 export interface UploadUrlResponse {
@@ -13,40 +21,81 @@ export interface UploadUrlResponse {
   expiresAt: string;
 }
 
-export interface MultipartInitResponse {
-  uploadId: string;
-  key: string;
-}
-
-export interface PartUrlResponse {
-  url: string;
-  partNumber: number;
-}
-
 export interface DownloadTokenResponse {
   token: string;
   tokenUrl: string;
 }
 
+export interface MultipartInitResponse {
+  uploadId: string;
+  key: string;
+}
+
+export interface MultipartPartUrlResponse {
+  url: string;
+  partNumber: number;
+}
+
+export type PartUrlResponse = MultipartPartUrlResponse;
+
+export interface MultipartCompleteResponse {
+  key: string;
+  location: string | null;
+}
+
+export interface ShareRecord {
+  id: string;
+  owner_email: string;
+  path: string;
+  is_folder: number;
+  permission: string;
+  grantee_email: string;
+  link_token: string;
+  created_at: number;
+}
+
+export interface CreateShareResponse {
+  id: string;
+  linkToken: string;
+  linkUrl: string;
+}
+
+export interface SharedItemResponse {
+  share: {
+    id: string;
+    ownerEmail: string;
+    path: string;
+    isFolder: boolean;
+    permission: string;
+  };
+  entries?: FileEntry[];
+  downloadUrl?: string;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, init);
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
   if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {}
-    throw new Error(message);
+    const err = await res.json() as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
-export async function listFiles(cursor?: string): Promise<{
-  files: FileItem[];
-  truncated: boolean;
-  cursor: string | null;
-}> {
-  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+export async function getMe(): Promise<UserInfo> {
+  return apiFetch("/me");
+}
+
+export async function listFiles(prefix = "", cursor?: string): Promise<{ entries: FileEntry[]; truncated: boolean; cursor: string | null }> {
+  const params = new URLSearchParams();
+  if (prefix) params.set("prefix", prefix);
+  if (cursor) params.set("cursor", cursor);
+  const qs = params.size ? `?${params.toString()}` : "";
   return apiFetch(`/files${qs}`);
 }
 
@@ -116,4 +165,32 @@ export async function abortMultipart(key: string, uploadId: string): Promise<voi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, uploadId }),
   }).catch(() => {});
+}
+
+export async function createShare(
+  key: string,
+  isFolder: boolean,
+  granteeEmail: string,
+  permission: string
+): Promise<CreateShareResponse> {
+  return apiFetch("/shares", {
+    method: "POST",
+    body: JSON.stringify({ key, isFolder, granteeEmail, permission }),
+  });
+}
+
+export async function listMyShares(): Promise<{ shares: ShareRecord[] }> {
+  return apiFetch("/shares");
+}
+
+export async function listSharedWithMe(): Promise<{ shares: ShareRecord[] }> {
+  return apiFetch("/shares/inbox");
+}
+
+export async function revokeShare(id: string): Promise<void> {
+  await apiFetch(`/shares/${id}`, { method: "DELETE" });
+}
+
+export async function getSharedItem(token: string): Promise<SharedItemResponse> {
+  return apiFetch(`/shared/${token}`);
 }
