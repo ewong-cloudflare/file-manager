@@ -1,0 +1,168 @@
+import {
+  Download,
+  FileText,
+  Image,
+  Film,
+  Music,
+  Archive,
+  File,
+  Trash2,
+  RefreshCw,
+} from "lucide-react";
+import type { FileItem } from "../lib/api";
+
+interface FileListProps {
+  files: FileItem[];
+  loading: boolean;
+  onDownload: (key: string) => void;
+  onDelete: (key: string) => void;
+  onRefresh: () => void;
+  downloadingKey: string | null;
+  deletingKey: string | null;
+}
+
+function fileIcon(key: string) {
+  const ext = key.split(".").pop()?.toLowerCase() ?? "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext))
+    return <Image className="w-4 h-4 text-violet-500" />;
+  if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext))
+    return <Film className="w-4 h-4 text-pink-500" />;
+  if (["mp3", "wav", "flac", "ogg", "m4a"].includes(ext))
+    return <Music className="w-4 h-4 text-amber-500" />;
+  if (["pdf", "doc", "docx", "txt", "md", "csv", "xls", "xlsx"].includes(ext))
+    return <FileText className="w-4 h-4 text-blue-500" />;
+  if (["zip", "tar", "gz", "bz2", "7z", "rar"].includes(ext))
+    return <Archive className="w-4 h-4 text-orange-500" />;
+  return <File className="w-4 h-4 text-slate-400" />;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function FileList({
+  files,
+  loading,
+  onDownload,
+  onDelete,
+  onRefresh,
+  downloadingKey,
+  deletingKey,
+}: FileListProps) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 className="text-sm font-semibold text-slate-700">
+          Files
+          {!loading && (
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              {files.length} object{files.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </h2>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="divide-y divide-slate-50">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="px-5 py-4 flex items-center gap-3 animate-pulse">
+              <div className="w-4 h-4 bg-slate-200 rounded" />
+              <div className="flex-1 h-3 bg-slate-200 rounded" />
+              <div className="w-16 h-3 bg-slate-100 rounded" />
+              <div className="w-28 h-3 bg-slate-100 rounded" />
+              <div className="w-16 h-3 bg-slate-100 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : files.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <File className="w-10 h-10 mb-3 opacity-30" />
+          <p className="text-sm">No files uploaded yet</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wide bg-slate-50">
+                <th className="px-5 py-3">Name</th>
+                <th className="px-5 py-3 text-right">Size</th>
+                <th className="px-5 py-3">Modified</th>
+                <th className="px-5 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {files.map((file) => (
+                <tr
+                  key={file.key}
+                  className="hover:bg-slate-50 transition-colors group"
+                >
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {fileIcon(file.key)}
+                      <span
+                        className="truncate text-slate-700 font-medium"
+                        title={file.key}
+                      >
+                        {file.key}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-right text-slate-500 whitespace-nowrap tabular-nums">
+                    {formatSize(file.size)}
+                  </td>
+                  <td className="px-5 py-3.5 text-slate-400 whitespace-nowrap text-xs">
+                    {formatDate(file.lastModified)}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => onDownload(file.key)}
+                        disabled={downloadingKey === file.key}
+                        title="Generate one-time download link"
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {downloadingKey === file.key ? "…" : "Download"}
+                      </button>
+                      <button
+                        onClick={() => onDelete(file.key)}
+                        disabled={deletingKey === file.key}
+                        title="Delete file"
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {deletingKey === file.key ? "…" : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

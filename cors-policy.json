@@ -1,0 +1,12 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://*.workers.dev",
+      "https://your-custom-domain.com"
+    ],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["Content-Type", "Content-Length", "x-amz-*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

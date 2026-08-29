@@ -1,0 +1,16 @@
+{
+  "name": "cf-file-manager",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/worker",
+    "packages/ui"
+  ],
+  "scripts": {
+    "dev:worker": "npm run dev --workspace=packages/worker",
+    "dev:ui": "npm run dev --workspace=packages/ui",
+    "build:ui": "npm run build --workspace=packages/ui",
+    "deploy": "npm run build:ui && npm run deploy --workspace=packages/worker",
+    "type-check": "npm run type-check --workspace=packages/worker && npm run type-check --workspace=packages/ui"
+  }
+}
