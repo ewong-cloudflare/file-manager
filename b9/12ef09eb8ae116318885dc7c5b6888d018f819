@@ -1,0 +1,23 @@
+package-lock.json
+  s_fcd6a5200b54b6::t_0a4e162cb9e54f 3094-3102,4820-4821
+packages/ui/tsconfig.app.tsbuildinfo
+  s_fcd6a5200b54b6::t_be69d63bb9d8db 1
+packages/worker/package.json
+  s_fcd6a5200b54b6::t_a698703e97cc73 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b912ef09eb8ae116318885dc7c5b6888d018f819",
+  "prompts": {},
+  "sessions": {
+    "s_fcd6a5200b54b6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "58e873c5-03e8-43ff-89e7-2505e89131a0",
+        "model": "Claude Sonnet 4.6 Thinking"
+      },
+      "human_author": "ewong <ewong@cloudflare.com>"
+    }
+  }
+}
