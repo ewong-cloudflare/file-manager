@@ -6,7 +6,7 @@ import { Header } from "./components/Header";
 import { Breadcrumb } from "./components/Breadcrumb";
 import { ShareModal } from "./components/ShareModal";
 import { SharedWithMe } from "./components/SharedWithMe";
-import { getDownloadToken, deleteFile, listFiles, getMe } from "./lib/api";
+import { getDownloadToken, deleteFile, listFiles, getMe, createFolder } from "./lib/api";
 import type { FileItem, UserInfo } from "./lib/api";
 import type { UploadItem } from "./components/UploadZone";
 
@@ -34,6 +34,9 @@ export default function App() {
   const [currentPrefix, setCurrentPrefix] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("myfiles");
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [newFolderMode, setNewFolderMode] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const addToast = useCallback((message: string, type: Toast["type"]) => {
     const id = crypto.randomUUID();
@@ -133,6 +136,27 @@ export default function App() {
     setShareTarget({ key, isFolder });
   }, []);
 
+  const handleCreateFolder = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const name = newFolderName.trim();
+      if (!name) return;
+      setCreatingFolder(true);
+      try {
+        await createFolder(currentPrefix, name);
+        setNewFolderMode(false);
+        setNewFolderName("");
+        void fetchFiles();
+        addToast(`Folder "${name}" created`, "success");
+      } catch {
+        addToast("Failed to create folder", "error");
+      } finally {
+        setCreatingFolder(false);
+      }
+    },
+    [currentPrefix, newFolderName, fetchFiles, addToast]
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header user={user} />
@@ -163,7 +187,42 @@ export default function App() {
 
         {activeTab === "myfiles" ? (
           <>
-            <Breadcrumb prefix={currentPrefix} onNavigate={handleNavigate} />
+            <div className="flex items-center justify-between">
+              <Breadcrumb prefix={currentPrefix} onNavigate={handleNavigate} />
+              {!newFolderMode ? (
+                <button
+                  onClick={() => setNewFolderMode(true)}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <span className="text-base leading-none">+</span> New Folder
+                </button>
+              ) : (
+                <form onSubmit={(e) => void handleCreateFolder(e)} className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="Folder name"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingFolder || !newFolderName.trim()}
+                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                  >
+                    {creatingFolder ? "…" : "Create"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setNewFolderMode(false); setNewFolderName(""); }}
+                    className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </div>
             <UploadZone
               uploads={uploads}
               currentPrefix={currentPrefix}

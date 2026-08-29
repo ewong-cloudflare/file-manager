@@ -54,10 +54,15 @@ export interface ShareRecord {
   created_at: number;
 }
 
-export interface CreateShareResponse {
+export interface ShareResult {
   id: string;
   linkToken: string;
   linkUrl: string;
+  granteeEmail: string;
+}
+
+export interface CreateShareResponse {
+  shares: ShareResult[];
 }
 
 export interface SharedItemResponse {
@@ -170,12 +175,19 @@ export async function abortMultipart(key: string, uploadId: string): Promise<voi
 export async function createShare(
   key: string,
   isFolder: boolean,
-  granteeEmail: string,
+  granteeEmails: string[],
   permission: string
 ): Promise<CreateShareResponse> {
   return apiFetch("/shares", {
     method: "POST",
-    body: JSON.stringify({ key, isFolder, granteeEmail, permission }),
+    body: JSON.stringify({ key, isFolder, granteeEmails, permission }),
+  });
+}
+
+export async function createFolder(prefix: string, name: string): Promise<{ created: string }> {
+  return apiFetch("/mkdir", {
+    method: "POST",
+    body: JSON.stringify({ prefix, name }),
   });
 }
 

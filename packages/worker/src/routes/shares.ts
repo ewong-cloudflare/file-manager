@@ -26,13 +26,13 @@ sharesRouter.post("/shares", async (c) => {
   const body = await c.req.json<{
     key?: string;
     isFolder?: boolean;
-    granteeEmail?: string;
+    granteeEmails?: string[];
     permission?: string;
   }>();
-  const { key, isFolder = false, granteeEmail, permission } = body;
+  const { key, isFolder = false, granteeEmails, permission } = body;
 
-  if (!key || !granteeEmail || !permission) {
-    return c.json({ error: "key, granteeEmail, and permission are required" }, 400);
+  if (!key || !Array.isArray(granteeEmails) || granteeEmails.length === 0 || !permission) {
+    return c.json({ error: "key, granteeEmails (array), and permission are required" }, 400);
   }
 
   const validPermissions = ["read", "read_write", "read_write_delete"];
@@ -41,19 +41,21 @@ sharesRouter.post("/shares", async (c) => {
   }
 
   const r2Path = `${user.email}/${key}`;
-  const id = crypto.randomUUID();
-  const linkToken = crypto.randomUUID();
-
-  await c.env.DB.prepare(
+  const now = Date.now();
+  const stmt = c.env.DB.prepare(
     "INSERT INTO shares (id, owner_email, path, is_folder, permission, grantee_email, link_token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  )
-    .bind(id, user.email, r2Path, isFolder ? 1 : 0, permission, granteeEmail, linkToken, Date.now())
-    .run();
+  );
+
+  const results = granteeEmails.map((email) => {
+    const id = crypto.randomUUID();
+    const linkToken = crypto.randomUUID();
+    return { id, linkToken, linkUrl: `/shared/${linkToken}`, granteeEmail: email, stmt: stmt.bind(id, user.email, r2Path, isFolder ? 1 : 0, permission, email, linkToken, now) };
+  });
+
+  await c.env.DB.batch(results.map((r) => r.stmt));
 
   return c.json({
-    id,
-    linkToken,
-    linkUrl: `/shared/${linkToken}`,
+    shares: results.map(({ id, linkToken, linkUrl, granteeEmail }) => ({ id, linkToken, linkUrl, granteeEmail })),
   });
 });
 

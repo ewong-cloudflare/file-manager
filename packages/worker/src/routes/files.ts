@@ -75,6 +75,24 @@ filesRouter.post("/upload-url", async (c) => {
   return c.json({ url, key, expiresAt });
 });
 
+filesRouter.post("/mkdir", async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json<{ prefix?: string; name?: string }>();
+  const { prefix = "", name } = body;
+
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+  if (name.includes("/")) {
+    return c.json({ error: "Folder name must not contain /" }, 400);
+  }
+
+  const r2Key = `${user.email}/${prefix}${name}/.keep`;
+  await c.env.my_files.put(r2Key, new Uint8Array(0));
+
+  return c.json({ created: `${prefix}${name}/` });
+});
+
 filesRouter.delete("/files", async (c) => {
   const user = c.get("user");
   const key = c.req.query("key");
