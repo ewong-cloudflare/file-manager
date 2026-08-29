@@ -54,15 +54,10 @@ export interface ShareRecord {
   created_at: number;
 }
 
-export interface ShareResult {
-  id: string;
+export interface CreateShareResponse {
   linkToken: string;
   linkUrl: string;
-  granteeEmail: string;
-}
-
-export interface CreateShareResponse {
-  shares: ShareResult[];
+  granteeEmails: string[];
 }
 
 export interface SharedItemResponse {

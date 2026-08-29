@@ -28,7 +28,9 @@ filesRouter.get("/files", async (c) => {
     type: "folder" as const,
   }));
 
-  const files = list.objects.map((obj) => ({
+  const files = list.objects
+    .filter((obj) => !obj.key.endsWith("/.keep"))
+    .map((obj) => ({
     key: obj.key.slice(user.email.length + 1),
     size: obj.size,
     lastModified: obj.uploaded.toISOString(),
@@ -99,7 +101,24 @@ filesRouter.delete("/files", async (c) => {
   if (!key) {
     return c.json({ error: "key query parameter is required" }, 400);
   }
+
   const r2Key = `${user.email}/${key}`;
+
+  if (key.endsWith("/")) {
+    let cursor: string | undefined;
+    const deleted: string[] = [];
+    do {
+      const list = await c.env.my_files.list({ prefix: r2Key, cursor });
+      const keys = list.objects.map((o) => o.key);
+      if (keys.length > 0) {
+        await c.env.my_files.delete(keys);
+        deleted.push(...keys);
+      }
+      cursor = list.truncated ? list.cursor : undefined;
+    } while (cursor);
+    return c.json({ deleted: key, count: deleted.length });
+  }
+
   await c.env.my_files.delete(r2Key);
   return c.json({ deleted: key });
 });

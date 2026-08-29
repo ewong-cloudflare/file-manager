@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Link, Check, Loader2, AlertCircle } from "lucide-react";
 import { createShare } from "../lib/api";
-import type { ShareResult } from "../lib/api";
+import type { CreateShareResponse } from "../lib/api";
 
 interface ShareModalProps {
   itemKey: string;
@@ -26,8 +26,8 @@ export function ShareModal({ itemKey, isFolder, onClose }: ShareModalProps) {
   const [emailsRaw, setEmailsRaw] = useState("");
   const [permission, setPermission] = useState<string>("read");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<ShareResult[] | null>(null);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [result, setResult] = useState<CreateShareResponse | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const displayName = itemKey.split("/").filter(Boolean).pop() ?? itemKey;
@@ -43,7 +43,7 @@ export function ShareModal({ itemKey, isFolder, onClose }: ShareModalProps) {
     setLoading(true);
     try {
       const res = await createShare(itemKey, isFolder, parsedEmails, permission);
-      setResults(res.shares);
+      setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create share");
     } finally {
@@ -51,10 +51,11 @@ export function ShareModal({ itemKey, isFolder, onClose }: ShareModalProps) {
     }
   }
 
-  async function handleCopy(token: string, link: string) {
-    await navigator.clipboard.writeText(`${window.location.origin}${link}`);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
+  async function handleCopy() {
+    if (!result) return;
+    await navigator.clipboard.writeText(`${window.location.origin}${result.linkUrl}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -68,7 +69,7 @@ export function ShareModal({ itemKey, isFolder, onClose }: ShareModalProps) {
         </div>
 
         <div className="px-6 py-5 overflow-y-auto">
-          {!results ? (
+          {!result ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -133,30 +134,32 @@ export function ShareModal({ itemKey, isFolder, onClose }: ShareModalProps) {
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {loading
-                  ? "Creating shares…"
+                  ? "Creating share…"
                   : `Share with ${parsedEmails.length || "…"} recipient${parsedEmails.length !== 1 ? "s" : ""}`}
               </button>
             </form>
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-slate-600">
-                {results.length} share{results.length !== 1 ? "s" : ""} created. Each recipient also sees the item in their "Shared with me" inbox.
+                Share link created for{" "}
+                <span className="font-medium">{result.granteeEmails.join(", ")}</span>.
+                Recipients also see this in their "Shared with me" inbox.
               </p>
-              <div className="space-y-2">
-                {results.map((r) => (
-                  <div key={r.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <span className="text-xs text-slate-600 truncate flex-1 min-w-0">{r.granteeEmail}</span>
-                    <button
-                      onClick={() => void handleCopy(r.linkToken, r.linkUrl)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 transition-colors shrink-0"
-                    >
-                      {copiedToken === r.linkToken
-                        ? <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        : <Link className="w-3.5 h-3.5" />}
-                      {copiedToken === r.linkToken ? "Copied!" : "Copy link"}
-                    </button>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}${result.linkUrl}`}
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 bg-slate-50 truncate"
+                />
+                <button
+                  onClick={() => void handleCopy()}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm text-slate-700 transition-colors shrink-0"
+                >
+                  {copied
+                    ? <Check className="w-4 h-4 text-emerald-500" />
+                    : <Link className="w-4 h-4" />}
+                  {copied ? "Copied!" : "Copy link"}
+                </button>
               </div>
               <button
                 onClick={onClose}

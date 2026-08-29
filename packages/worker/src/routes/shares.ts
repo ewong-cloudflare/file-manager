@@ -42,20 +42,24 @@ sharesRouter.post("/shares", async (c) => {
 
   const r2Path = `${user.email}/${key}`;
   const now = Date.now();
+  const linkToken = crypto.randomUUID();
+  const linkUrl = `/shared/${linkToken}`;
   const stmt = c.env.DB.prepare(
     "INSERT INTO shares (id, owner_email, path, is_folder, permission, grantee_email, link_token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   );
 
-  const results = granteeEmails.map((email) => {
-    const id = crypto.randomUUID();
-    const linkToken = crypto.randomUUID();
-    return { id, linkToken, linkUrl: `/shared/${linkToken}`, granteeEmail: email, stmt: stmt.bind(id, user.email, r2Path, isFolder ? 1 : 0, permission, email, linkToken, now) };
-  });
+  const rows = granteeEmails.map((email) => ({
+    id: crypto.randomUUID(),
+    granteeEmail: email,
+    stmt: stmt.bind(crypto.randomUUID(), user.email, r2Path, isFolder ? 1 : 0, permission, email, linkToken, now),
+  }));
 
-  await c.env.DB.batch(results.map((r) => r.stmt));
+  await c.env.DB.batch(rows.map((r) => r.stmt));
 
   return c.json({
-    shares: results.map(({ id, linkToken, linkUrl, granteeEmail }) => ({ id, linkToken, linkUrl, granteeEmail })),
+    linkToken,
+    linkUrl,
+    granteeEmails,
   });
 });
 
@@ -117,7 +121,9 @@ sharesRouter.get("/shared/:token", async (c) => {
     return c.json({ error: "Share link not found or has been revoked" }, 404);
   }
 
-  if (share.grantee_email !== user.email) {
+  const isGrantee = share.grantee_email === user.email;
+  const isOwner = share.owner_email === user.email;
+  if (!isGrantee && !isOwner) {
     return c.json({ error: "Forbidden — this share is not for your account" }, 403);
   }
 
