@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client } from "../lib/s3";
 import type { Env, UserContext } from "../types";
 
@@ -75,6 +75,27 @@ filesRouter.post("/upload-url", async (c) => {
 
   const expiresAt = new Date(Date.now() + PRESIGN_EXPIRY_SECONDS * 1000).toISOString();
   return c.json({ url, key, expiresAt });
+});
+
+filesRouter.post("/preview-url", async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json<{ key?: string }>();
+  const { key } = body;
+  if (!key) return c.json({ error: "key is required" }, 400);
+
+  const r2Key = `${user.email}/${key}`;
+  const fileName = key.split("/").filter(Boolean).pop() ?? key;
+  const s3 = createS3Client(c.env);
+  const previewUrl = await getSignedUrl(
+    s3,
+    new GetObjectCommand({
+      Bucket: c.env.R2_BUCKET_NAME,
+      Key: r2Key,
+      ResponseContentDisposition: `inline; filename="${encodeURIComponent(fileName)}"`,
+    }),
+    { expiresIn: PRESIGN_EXPIRY_SECONDS }
+  );
+  return c.json({ previewUrl });
 });
 
 filesRouter.post("/mkdir", async (c) => {

@@ -10,8 +10,13 @@ import {
   Trash2,
   RefreshCw,
   Share2,
+  Eye,
 } from "lucide-react";
+import { useState } from "react";
 import type { FileItem } from "../lib/api";
+import { PreviewModal, canPreview } from "./PreviewModal";
+import type { PreviewTarget } from "./PreviewModal";
+import { getPreviewUrl } from "../lib/api";
 
 interface FileListProps {
   files: FileItem[];
@@ -75,7 +80,11 @@ export function FileList({
   downloadingKey,
   deletingKey,
 }: FileListProps) {
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+
   return (
+    <>
+    {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
         <h2 className="text-sm font-semibold text-slate-700">
@@ -164,6 +173,19 @@ export function FileList({
                         <Share2 className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Share</span>
                       </button>
+                      {entry.type === "file" && canPreview(entry.key) && (
+                        <button
+                          onClick={() => setPreview({
+                            key: entry.key,
+                            fetchUrl: () => getPreviewUrl(entry.key),
+                          })}
+                          title="Preview"
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Preview</span>
+                        </button>
+                      )}
                       {entry.type === "file" && (
                         <button
                           onClick={() => onDownload(entry.key)}
@@ -193,5 +215,6 @@ export function FileList({
         </div>
       )}
     </div>
+    </>
   );
 }

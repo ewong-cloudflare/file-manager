@@ -209,6 +209,47 @@ export async function revokeShare(id: string): Promise<void> {
   await apiFetch(`/shares/${id}`, { method: "DELETE" });
 }
 
-export async function getSharedItem(token: string): Promise<SharedItemResponse> {
-  return apiFetch(`/shared/${token}`);
+export async function getSharedItem(token: string, subPrefix?: string): Promise<SharedItemResponse> {
+  const qs = subPrefix ? `?subPrefix=${encodeURIComponent(subPrefix)}` : "";
+  return apiFetch(`/shared/${token}${qs}`);
+}
+
+export async function getPreviewUrl(key: string): Promise<{ previewUrl: string }> {
+  return apiFetch("/preview-url", { method: "POST", body: JSON.stringify({ key }) });
+}
+
+export async function sharedPreviewUrl(token: string, key: string): Promise<{ previewUrl: string }> {
+  return apiFetch(`/shared/${token}/preview-url`, { method: "POST", body: JSON.stringify({ key }) });
+}
+
+export async function sharedUploadUrl(token: string, key: string, contentType: string, size: number): Promise<{ url: string; key: string }> {
+  return apiFetch(`/shared/${token}/upload-url`, { method: "POST", body: JSON.stringify({ key, contentType, size }) });
+}
+
+export async function sharedInitMultipart(token: string, key: string, contentType: string): Promise<MultipartInitResponse> {
+  return apiFetch(`/shared/${token}/multipart/init`, { method: "POST", body: JSON.stringify({ key, contentType }) });
+}
+
+export async function sharedPartUrl(token: string, key: string, uploadId: string, partNumber: number, partSize?: number): Promise<PartUrlResponse> {
+  return apiFetch(`/shared/${token}/multipart/part-url`, { method: "POST", body: JSON.stringify({ key, uploadId, partNumber, partSize }) });
+}
+
+export async function sharedCompleteMultipart(token: string, key: string, uploadId: string, parts: Array<{ PartNumber: number; ETag: string }>): Promise<void> {
+  await apiFetch(`/shared/${token}/multipart/complete`, { method: "POST", body: JSON.stringify({ key, uploadId, parts }) });
+}
+
+export async function sharedAbortMultipart(token: string, key: string, uploadId: string): Promise<void> {
+  await fetch(`/api/shared/${token}/multipart/abort`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, uploadId }),
+  }).catch(() => {});
+}
+
+export async function sharedDeleteFile(token: string, key: string): Promise<void> {
+  await apiFetch(`/shared/${token}/file?key=${encodeURIComponent(key)}`, { method: "DELETE" });
+}
+
+export async function sharedMkdir(token: string, prefix: string, name: string): Promise<{ created: string }> {
+  return apiFetch(`/shared/${token}/mkdir`, { method: "POST", body: JSON.stringify({ prefix, name }) });
 }
