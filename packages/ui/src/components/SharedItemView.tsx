@@ -541,7 +541,23 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                                   {name}
                                 </button>
                               ) : (
-                                <span className="text-slate-700 font-medium truncate max-w-[200px]">{name}</span>
+                                <button
+                                  onClick={() => {
+                                    const fileEntries = entries.filter((e) => e.type === "file");
+                                    const idx = fileEntries.findIndex((e) => e.key === entry.key);
+                                    setPreview({
+                                      entries: fileEntries.map((e) => ({
+                                        key: e.key,
+                                        fetchUrl: () => sharedPreviewUrl(token, e.key),
+                                        fetchDownloadUrl: () => sharedDownloadUrl(token, e.key),
+                                      })),
+                                      initialIndex: Math.max(0, idx),
+                                    });
+                                  }}
+                                  className="text-slate-700 hover:text-blue-600 font-medium truncate max-w-[200px] text-left transition-colors"
+                                >
+                                  {name}
+                                </button>
                               )}
                             </div>
                           </td>

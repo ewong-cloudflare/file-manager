@@ -82,6 +82,22 @@ export function FileList({
 }: FileListProps) {
   const [previewState, setPreviewState] = useState<{ entries: PreviewEntry[]; initialIndex: number } | null>(null);
 
+  function openPreview(entry: FileItem) {
+    const allFiles = files.filter((f) => f.type === "file");
+    const idx = allFiles.findIndex((f) => f.key === entry.key);
+    setPreviewState({
+      entries: allFiles.map((f) => ({
+        key: f.key,
+        fetchUrl: () => getPreviewUrl(f.key),
+        fetchDownloadUrl: async () => {
+          const { tokenUrl } = await getDownloadToken(f.key);
+          return { url: tokenUrl };
+        },
+      })),
+      initialIndex: Math.max(0, idx),
+    });
+  }
+
   return (
     <>
       {previewState && (
@@ -153,9 +169,13 @@ export function FileList({
                             {displayName(entry.key)}
                           </button>
                         ) : (
-                          <span className="truncate text-slate-700 font-medium" title={entry.key}>
+                          <button
+                            onClick={() => openPreview(entry)}
+                            className="truncate text-slate-700 font-medium hover:text-blue-600 transition-colors text-left"
+                            title={entry.key}
+                          >
                             {displayName(entry.key)}
-                          </span>
+                          </button>
                         )}
                       </div>
                     </td>
@@ -177,21 +197,7 @@ export function FileList({
                         </button>
                         {entry.type === "file" && canPreview(entry.key) && (
                           <button
-                            onClick={() => {
-                              const allFiles = files.filter((f) => f.type === "file");
-                              const idx = allFiles.findIndex((f) => f.key === entry.key);
-                              setPreviewState({
-                                entries: allFiles.map((f) => ({
-                                  key: f.key,
-                                  fetchUrl: () => getPreviewUrl(f.key),
-                                  fetchDownloadUrl: async () => {
-                                    const { tokenUrl } = await getDownloadToken(f.key);
-                                    return { url: tokenUrl };
-                                  },
-                                })),
-                                initialIndex: Math.max(0, idx),
-                              });
-                            }}
+                            onClick={() => openPreview(entry)}
                             title="Preview"
                             className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                           >
