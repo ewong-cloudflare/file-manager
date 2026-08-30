@@ -6,6 +6,7 @@ import { Header } from "./components/Header";
 import { Breadcrumb } from "./components/Breadcrumb";
 import { ShareModal } from "./components/ShareModal";
 import { SharedWithMe } from "./components/SharedWithMe";
+import { SharedItemView } from "./components/SharedItemView";
 import { getDownloadToken, deleteFile, listFiles, getMe, createFolder } from "./lib/api";
 import type { FileItem, UserInfo } from "./lib/api";
 import type { UploadItem } from "./components/UploadZone";
@@ -23,7 +24,7 @@ interface ShareTarget {
   isFolder: boolean;
 }
 
-export default function App() {
+function FileManagerApp() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
@@ -283,4 +284,10 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export default function App() {
+  const m = window.location.pathname.match(/^\/shared\/([^/]+)$/);
+  if (m) return <SharedItemView token={m[1]} />;
+  return <FileManagerApp />;
 }

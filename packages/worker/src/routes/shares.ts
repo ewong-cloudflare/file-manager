@@ -112,19 +112,13 @@ sharesRouter.get("/shared/:token", async (c) => {
   const token = c.req.param("token");
 
   const share = await c.env.DB.prepare(
-    "SELECT * FROM shares WHERE link_token = ?"
+    "SELECT * FROM shares WHERE link_token = ? AND (grantee_email = ? OR owner_email = ?) LIMIT 1"
   )
-    .bind(token)
+    .bind(token, user.email, user.email)
     .first<ShareRow>();
 
   if (!share) {
-    return c.json({ error: "Share link not found or has been revoked" }, 404);
-  }
-
-  const isGrantee = share.grantee_email === user.email;
-  const isOwner = share.owner_email === user.email;
-  if (!isGrantee && !isOwner) {
-    return c.json({ error: "Forbidden — this share is not for your account" }, 403);
+    return c.json({ error: "Share link not found, revoked, or not shared with your account" }, 404);
   }
 
   if (share.is_folder) {
