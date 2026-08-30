@@ -70,6 +70,7 @@ export interface SharedItemResponse {
   };
   entries?: FileEntry[];
   downloadUrl?: string;
+  filePerms?: Record<string, string>;
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {

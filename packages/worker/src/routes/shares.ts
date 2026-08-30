@@ -219,6 +219,18 @@ sharesRouter.get("/shared/:token", async (c) => {
         type: "file" as const,
       }));
 
+    // Per-file permission overrides for this grantee (owners have full access everywhere)
+    const filePerms: Record<string, string> = {};
+    if (share.owner_email !== user.email) {
+      const fileShareRows = await c.env.DB.prepare(
+        "SELECT path, permission FROM shares WHERE owner_email = ? AND grantee_email = ? AND is_folder = 0 AND path LIKE ?"
+      ).bind(share.owner_email, user.email, `${listPrefix}%`).all<{ path: string; permission: string }>();
+      for (const row of fileShareRows.results) {
+        const relKey = row.path.slice(basePrefix.length);
+        if (relKey) filePerms[relKey] = row.permission;
+      }
+    }
+
     return c.json({
       share: {
         id: share.id,
@@ -228,6 +240,7 @@ sharesRouter.get("/shared/:token", async (c) => {
         permission: effectivePerm,
       },
       entries: [...folders, ...files],
+      filePerms,
     });
   }
 

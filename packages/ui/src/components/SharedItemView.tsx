@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Download, Folder, FileText, Loader2, AlertCircle, ArrowLeft,
   Eye, Trash2, UploadCloud, FolderPlus, ChevronRight, Home,
-  Users, ChevronDown, UserX, Plus,
+  Users, UserX, Plus, X,
 } from "lucide-react";
 import {
   getSharedItem, sharedPreviewUrl, sharedDownloadUrl, sharedUploadUrl, sharedInitMultipart,
@@ -76,6 +76,12 @@ async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): P
   return results;
 }
 
+const PERMISSION_RANK_MAP: Record<string, number> = { read: 0, read_write: 1, read_write_delete: 2 };
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 function formatSize(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -107,6 +113,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const [addPerm, setAddPerm] = useState("read");
   const [addingGrantee, setAddingGrantee] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [filePerms, setFilePerms] = useState<Record<string, string>>({});
 
   const fetchContents = useCallback(async (sp: string) => {
     setLoading(true);
@@ -116,6 +123,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
       setShareInfo(data.share);
       setEntries(data.entries ?? []);
       setDownloadUrl(data.downloadUrl ?? null);
+      setFilePerms(data.filePerms ?? {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load shared item");
     } finally {
@@ -266,99 +274,6 @@ export function SharedItemView({ token }: SharedItemViewProps) {
 
   const activeUploads = uploads.filter((u) => u.status === "uploading" || u.status === "error");
 
-  const granteePanel = canWrite && (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-      <button
-        onClick={() => {
-          const next = !showGrantees;
-          setShowGrantees(next);
-          if (next && grantees === null) void loadGrantees();
-        }}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-medium text-slate-700">People with access</span>
-          {grantees !== null && (
-            <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">{grantees.length}</span>
-          )}
-        </div>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showGrantees ? "rotate-180" : ""}`} />
-      </button>
-
-      {showGrantees && (
-        <div className="border-t border-slate-100">
-          {granteesLoading ? (
-            <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
-          ) : (
-            <div>
-              {grantees && grantees.length > 0 ? (
-                <div className="divide-y divide-slate-50">
-                  {grantees.map((g) => (
-                    <div key={g.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-700 truncate">{g.grantee_email}</p>
-                        <span className={`inline-block mt-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${PERMISSION_COLORS[g.permission] ?? "bg-slate-100 text-slate-600"}`}>
-                          {PERMISSION_LABELS[g.permission] ?? g.permission}
-                        </span>
-                      </div>
-                      {canShare && (
-                        <button
-                          onClick={() => void handleRevokeGrantee(g.id)}
-                          disabled={revokingId === g.id}
-                          title="Remove access"
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-40"
-                        >
-                          {revokingId === g.id
-                            ? <Loader2 className="w-4 h-4 animate-spin" />
-                            : <UserX className="w-4 h-4" />}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="px-5 py-6 text-sm text-slate-400 text-center">No other people have access</p>
-              )}
-              {canShare && (
-                <div className="border-t border-slate-100 p-4 space-y-2">
-                  <p className="text-xs font-medium text-slate-600">Add person</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      value={addEmail}
-                      onChange={(e) => setAddEmail(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") void handleAddGrantee(); }}
-                      placeholder="email@example.com"
-                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
-                    />
-                    <select
-                      value={addPerm}
-                      onChange={(e) => setAddPerm(e.target.value)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white shrink-0"
-                    >
-                      <option value="read">Read</option>
-                      <option value="read_write">Read + Write</option>
-                      <option value="read_write_delete">Full Access</option>
-                    </select>
-                    <button
-                      onClick={() => void handleAddGrantee()}
-                      disabled={addingGrantee || !addEmail.trim()}
-                      className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors shrink-0"
-                    >
-                      {addingGrantee ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      Add
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Preview modal */}
@@ -412,39 +327,141 @@ export function SharedItemView({ token }: SharedItemViewProps) {
             </div>
 
             {/* Toolbar */}
-            <div className="flex items-center justify-between gap-3">
-              <div />
-              <div className="flex items-center gap-2">
-                {canWrite && !newFolderMode && (
-                  <button
-                    onClick={() => setNewFolderMode(true)}
-                    className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-1.5 transition-colors"
-                  >
-                    <FolderPlus className="w-3.5 h-3.5" /> New Folder
+            <div className="flex items-center justify-end gap-2">
+              {canWrite && !newFolderMode && (
+                <button
+                  onClick={() => {
+                    const next = !showGrantees;
+                    setShowGrantees(next);
+                    if (next && grantees === null) void loadGrantees();
+                  }}
+                  className={`flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${showGrantees ? "bg-blue-50 border-blue-200 text-blue-700" : "text-slate-500 hover:text-slate-700 border-slate-200 hover:border-slate-300"}`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  People
+                  {grantees !== null && <span className="bg-slate-200 text-slate-600 text-xs px-1 py-0.5 rounded-full leading-none">{grantees.length}</span>}
+                </button>
+              )}
+              {canWrite && !newFolderMode && (
+                <button
+                  onClick={() => setNewFolderMode(true)}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <FolderPlus className="w-3.5 h-3.5" /> New Folder
+                </button>
+              )}
+              {newFolderMode && (
+                <form onSubmit={(e) => void handleCreateFolder(e)} className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="Folder name"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-36"
+                  />
+                  <button type="submit" disabled={creatingFolder || !newFolderName.trim()}
+                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors">
+                    {creatingFolder ? "…" : "Create"}
                   </button>
-                )}
-                {newFolderMode && (
-                  <form onSubmit={(e) => void handleCreateFolder(e)} className="flex items-center gap-2">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      placeholder="Folder name"
-                      className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-36"
-                    />
-                    <button type="submit" disabled={creatingFolder || !newFolderName.trim()}
-                      className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors">
-                      {creatingFolder ? "…" : "Create"}
-                    </button>
-                    <button type="button" onClick={() => { setNewFolderMode(false); setNewFolderName(""); }}
-                      className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5">
-                      Cancel
-                    </button>
-                  </form>
+                  <button type="button" onClick={() => { setNewFolderMode(false); setNewFolderName(""); }}
+                    className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5">
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* People with access panel */}
+            {canWrite && showGrantees && (
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-500" />
+                    <span className="text-sm font-medium text-slate-700">People with access</span>
+                    {grantees !== null && <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">{grantees.length}</span>}
+                  </div>
+                  <button onClick={() => setShowGrantees(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {granteesLoading ? (
+                  <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+                ) : (
+                  <div>
+                    {grantees && grantees.length > 0 ? (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-xs text-slate-500 font-medium">
+                            <th className="text-left px-5 py-3">Person</th>
+                            <th className="text-left px-3 py-3">Access</th>
+                            {canShare && <th className="px-5 py-3" />}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {grantees.map((g) => (
+                            <tr key={g.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                              <td className="px-5 py-3 text-slate-700 text-sm truncate max-w-[200px]">{g.grantee_email}</td>
+                              <td className="px-3 py-3">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PERMISSION_COLORS[g.permission] ?? "bg-slate-100 text-slate-600"}`}>
+                                  {PERMISSION_LABELS[g.permission] ?? g.permission}
+                                </span>
+                              </td>
+                              {canShare && (
+                                <td className="px-5 py-3 text-right">
+                                  <button
+                                    onClick={() => void handleRevokeGrantee(g.id)}
+                                    disabled={revokingId === g.id}
+                                    title="Remove access"
+                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-40"
+                                  >
+                                    {revokingId === g.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="px-5 py-6 text-sm text-slate-400 text-center">No other people have access</p>
+                    )}
+                    {canShare && (
+                      <div className="border-t border-slate-100 p-4 space-y-2">
+                        <p className="text-xs font-medium text-slate-600">Add person</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            value={addEmail}
+                            onChange={(e) => setAddEmail(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") void handleAddGrantee(); }}
+                            placeholder="email@example.com"
+                            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                          />
+                          <select
+                            value={addPerm}
+                            onChange={(e) => setAddPerm(e.target.value)}
+                            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white shrink-0"
+                          >
+                            <option value="read">Read</option>
+                            <option value="read_write">Read + Write</option>
+                            <option value="read_write_delete">Full Access</option>
+                          </select>
+                          <button
+                            onClick={() => void handleAddGrantee()}
+                            disabled={addingGrantee || !addEmail.trim()}
+                            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors shrink-0"
+                          >
+                            {addingGrantee ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
+            )}
 
             {/* Upload zone */}
             {canWrite && (
@@ -491,87 +508,109 @@ export function SharedItemView({ token }: SharedItemViewProps) {
               {entries.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-12">This folder is empty</p>
               ) : (
-                <div className="divide-y divide-slate-50">
-                  {entries.map((entry) => {
-                    const name = entry.key.split("/").filter(Boolean).pop() ?? entry.key;
-                    const isDir = entry.type === "folder";
-                    const previewable = !isDir && canPreview(entry.key);
-                    const isDel = deletingKey === entry.key;
-                    return (
-                      <div key={entry.key} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
-                        <div className="shrink-0">
-                          {isDir
-                            ? <Folder className="w-5 h-5 text-amber-400" />
-                            : <FileText className="w-5 h-5 text-slate-400" />}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          {isDir ? (
-                            <button
-                              onClick={() => setSubPrefix(entry.key)}
-                              className="text-sm text-slate-800 hover:text-blue-600 font-medium truncate block text-left transition-colors"
-                            >
-                              {name}
-                            </button>
-                          ) : (
-                            <span className="text-sm text-slate-700 font-medium truncate block">{name}</span>
-                          )}
-                          {!isDir && entry.size && (
-                            <span className="text-xs text-slate-400">{formatSize(entry.size)}</span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {previewable && (
-                            <button
-                              onClick={() => {
-                                const fileEntries = entries.filter((e) => e.type === "file");
-                                const idx = fileEntries.findIndex((e) => e.key === entry.key);
-                                setPreview({
-                                  entries: fileEntries.map((e) => ({
-                                    key: e.key,
-                                    fetchUrl: () => sharedPreviewUrl(token, e.key),
-                                    fetchDownloadUrl: () => sharedDownloadUrl(token, e.key),
-                                  })),
-                                  initialIndex: Math.max(0, idx),
-                                });
-                              }}
-                              title="Preview"
-                              className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors rounded-md hover:bg-blue-50"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          )}
-                          {!isDir && (
-                            <button
-                              onClick={async () => {
-                                const { url } = await sharedDownloadUrl(token, entry.key);
-                                window.open(url, "_blank", "noopener,noreferrer");
-                              }}
-                              title="Download"
-                              className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors rounded-md hover:bg-slate-100"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={() => void handleDelete(entry.key)}
-                              disabled={isDel}
-                              title="Delete"
-                              className="p-1.5 text-slate-400 hover:text-red-500 disabled:opacity-40 transition-colors rounded-md hover:bg-red-50"
-                            >
-                              {isDel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs text-slate-500 font-medium">
+                      <th className="text-left px-5 py-3">Name</th>
+                      <th className="text-left px-3 py-3 hidden sm:table-cell">Size</th>
+                      <th className="text-left px-3 py-3 hidden md:table-cell">Modified</th>
+                      <th className="text-left px-3 py-3">Access</th>
+                      <th className="px-5 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((entry) => {
+                      const name = entry.key.split("/").filter(Boolean).pop() ?? entry.key;
+                      const isDir = entry.type === "folder";
+                      const previewable = !isDir && canPreview(entry.key);
+                      const isDel = deletingKey === entry.key;
+                      const fp = !isDir ? filePerms[entry.key] : undefined;
+                      const hasOverride = fp !== undefined && (PERMISSION_RANK_MAP[fp] ?? 0) > (PERMISSION_RANK_MAP[perm] ?? 0);
+                      return (
+                        <tr key={entry.key} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              {isDir
+                                ? <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+                                : <FileText className="w-4 h-4 text-slate-400 shrink-0" />}
+                              {isDir ? (
+                                <button
+                                  onClick={() => setSubPrefix(entry.key)}
+                                  className="text-slate-700 hover:text-blue-600 font-medium truncate max-w-[200px] text-left transition-colors"
+                                >
+                                  {name}
+                                </button>
+                              ) : (
+                                <span className="text-slate-700 font-medium truncate max-w-[200px]">{name}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 hidden sm:table-cell text-slate-500 text-xs">
+                            {!isDir && entry.size ? formatSize(entry.size) : "—"}
+                          </td>
+                          <td className="px-3 py-3 hidden md:table-cell text-slate-500 text-xs">
+                            {entry.lastModified ? formatDate(entry.lastModified) : "—"}
+                          </td>
+                          <td className="px-3 py-3">
+                            {hasOverride && fp && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PERMISSION_COLORS[fp] ?? "bg-slate-100 text-slate-600"}`}>
+                                {PERMISSION_LABELS[fp] ?? fp}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              {previewable && (
+                                <button
+                                  onClick={() => {
+                                    const fileEntries = entries.filter((e) => e.type === "file");
+                                    const idx = fileEntries.findIndex((e) => e.key === entry.key);
+                                    setPreview({
+                                      entries: fileEntries.map((e) => ({
+                                        key: e.key,
+                                        fetchUrl: () => sharedPreviewUrl(token, e.key),
+                                        fetchDownloadUrl: () => sharedDownloadUrl(token, e.key),
+                                      })),
+                                      initialIndex: Math.max(0, idx),
+                                    });
+                                  }}
+                                  title="Preview"
+                                  className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors rounded-md hover:bg-blue-50"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                              )}
+                              {!isDir && (
+                                <button
+                                  onClick={async () => {
+                                    const { url } = await sharedDownloadUrl(token, entry.key);
+                                    window.open(url, "_blank", "noopener,noreferrer");
+                                  }}
+                                  title="Download"
+                                  className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors rounded-md hover:bg-slate-100"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => void handleDelete(entry.key)}
+                                  disabled={isDel}
+                                  title="Delete"
+                                  className="p-1.5 text-slate-400 hover:text-red-500 disabled:opacity-40 transition-colors rounded-md hover:bg-red-50"
+                                >
+                                  {isDel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
-            {granteePanel}
           </>
         ) : (
           /* Single-file share */
@@ -614,9 +653,109 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                       <Download className="w-4 h-4" /> Download
                     </a>
                   )}
+                  {canWrite && (
+                    <button
+                      onClick={() => {
+                        const next = !showGrantees;
+                        setShowGrantees(next);
+                        if (next && grantees === null) void loadGrantees();
+                      }}
+                      className={`flex items-center justify-center gap-2 border text-sm font-medium py-2.5 px-4 rounded-xl transition-colors ${showGrantees ? "bg-blue-50 border-blue-200 text-blue-700" : "border-slate-200 hover:bg-slate-50 text-slate-700"}`}
+                    >
+                      <Users className="w-4 h-4" /> People
+                    </button>
+                  )}
                 </div>
               </div>
-              {granteePanel}
+              {canWrite && showGrantees && (
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">People with access</span>
+                      {grantees !== null && <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">{grantees.length}</span>}
+                    </div>
+                    <button onClick={() => setShowGrantees(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {granteesLoading ? (
+                    <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+                  ) : (
+                    <div>
+                      {grantees && grantees.length > 0 ? (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-xs text-slate-500 font-medium">
+                              <th className="text-left px-5 py-3">Person</th>
+                              <th className="text-left px-3 py-3">Access</th>
+                              {canShare && <th className="px-5 py-3" />}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {grantees.map((g) => (
+                              <tr key={g.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                                <td className="px-5 py-3 text-slate-700 text-sm truncate max-w-[200px]">{g.grantee_email}</td>
+                                <td className="px-3 py-3">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PERMISSION_COLORS[g.permission] ?? "bg-slate-100 text-slate-600"}`}>
+                                    {PERMISSION_LABELS[g.permission] ?? g.permission}
+                                  </span>
+                                </td>
+                                {canShare && (
+                                  <td className="px-5 py-3 text-right">
+                                    <button
+                                      onClick={() => void handleRevokeGrantee(g.id)}
+                                      disabled={revokingId === g.id}
+                                      title="Remove access"
+                                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-40"
+                                    >
+                                      {revokingId === g.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="px-5 py-6 text-sm text-slate-400 text-center">No other people have access</p>
+                      )}
+                      {canShare && (
+                        <div className="border-t border-slate-100 p-4 space-y-2">
+                          <p className="text-xs font-medium text-slate-600">Add person</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="email"
+                              value={addEmail}
+                              onChange={(e) => setAddEmail(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") void handleAddGrantee(); }}
+                              placeholder="email@example.com"
+                              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                            />
+                            <select
+                              value={addPerm}
+                              onChange={(e) => setAddPerm(e.target.value)}
+                              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white shrink-0"
+                            >
+                              <option value="read">Read</option>
+                              <option value="read_write">Read + Write</option>
+                              <option value="read_write_delete">Full Access</option>
+                            </select>
+                            <button
+                              onClick={() => void handleAddGrantee()}
+                              disabled={addingGrantee || !addEmail.trim()}
+                              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors shrink-0"
+                            >
+                              {addingGrantee ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )
         )}
