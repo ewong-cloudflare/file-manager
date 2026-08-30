@@ -19,10 +19,11 @@ const SINGLE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_PART_NUMBER = 10_000;
 const MAX_PART_BYTES = 5 * 1024 * 1024 * 1024 - 5 * 1024 * 1024;
 
-const PERM_ORDER: Record<string, number> = { read: 0, read_write: 1, read_write_delete: 2 };
-function hasPermission(actual: string, required: string): boolean {
-  return (PERM_ORDER[actual] ?? -1) >= (PERM_ORDER[required] ?? 99);
-}
+const PERMISSION_RANK: Record<string, number> = {
+  read: 0,
+  read_write: 1,
+  read_write_delete: 2,
+};
 
 interface ShareRow {
   id: string;
@@ -33,6 +34,21 @@ interface ShareRow {
   grantee_email: string;
   link_token: string;
   created_at: number;
+}
+
+async function resolveShare(
+  token: string,
+  userEmail: string,
+  minPermission: string,
+  db: Env["DB"]
+): Promise<ShareRow | null> {
+  const share = await db
+    .prepare("SELECT * FROM shares WHERE link_token = ? AND (grantee_email = ? OR owner_email = ?) LIMIT 1")
+    .bind(token, userEmail, userEmail)
+    .first<ShareRow>();
+  if (!share) return null;
+  if ((PERMISSION_RANK[share.permission] ?? -1) < (PERMISSION_RANK[minPermission] ?? 0)) return null;
+  return share;
 }
 
 export const sharesRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -164,21 +180,6 @@ sharesRouter.delete("/shares/:id", async (c) => {
   return c.json({ revoked: id });
 });
 
-async function resolveShare(
-  token: string,
-  userEmail: string,
-  minPermission: string,
-  db: Env["DB"]
-): Promise<ShareRow | null> {
-  const share = await db
-    .prepare("SELECT * FROM shares WHERE link_token = ? AND (grantee_email = ? OR owner_email = ?) LIMIT 1")
-    .bind(token, userEmail, userEmail)
-    .first<ShareRow>();
-  if (!share) return null;
-  if (!hasPermission(share.permission, minPermission)) return null;
-  return share;
-}
-
 sharesRouter.get("/shared/:token", async (c) => {
   const user = c.get("user");
   const token = c.req.param("token");
@@ -267,7 +268,7 @@ sharesRouter.post("/shared/:token/preview-url", async (c) => {
   const fileName = r2Key.split("/").pop() ?? r2Key;
 
   const s3 = createS3Client(c.env);
-  const previewUrl = await getSignedUrl(
+  const url = await getSignedUrl(
     s3,
     new GetObjectCommand({
       Bucket: c.env.R2_BUCKET_NAME,
@@ -277,7 +278,37 @@ sharesRouter.post("/shared/:token/preview-url", async (c) => {
     { expiresIn: PRESIGN_EXPIRY_SECONDS }
   );
 
-  return c.json({ previewUrl });
+  return c.json({ url });
+});
+
+// ── Download URL (attachment, read permission required) ───────────────────────
+sharesRouter.post("/shared/:token/download-url", async (c) => {
+  const user = c.get("user");
+  const token = c.req.param("token");
+  const body = await c.req.json<{ key?: string }>();
+
+  const share = await resolveShare(token, user.email, "read", c.env.DB);
+  if (!share) return c.json({ error: "Not found or insufficient permission" }, 403);
+
+  const basePrefix = share.is_folder
+    ? (share.path.endsWith("/") ? share.path : `${share.path}/`)
+    : "";
+
+  const r2Key = share.is_folder && body.key ? `${basePrefix}${body.key}` : share.path;
+  const fileName = r2Key.split("/").pop() ?? r2Key;
+
+  const s3 = createS3Client(c.env);
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({
+      Bucket: c.env.R2_BUCKET_NAME,
+      Key: r2Key,
+      ResponseContentDisposition: `attachment; filename="${encodeURIComponent(fileName)}"`,
+    }),
+    { expiresIn: PRESIGN_EXPIRY_SECONDS }
+  );
+
+  return c.json({ url });
 });
 
 // ── Upload URL (write permission required) ───────────────────────────────────

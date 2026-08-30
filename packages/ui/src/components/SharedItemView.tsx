@@ -4,13 +4,13 @@ import {
   Eye, Trash2, UploadCloud, FolderPlus, ChevronRight, Home,
 } from "lucide-react";
 import {
-  getSharedItem, sharedPreviewUrl, sharedUploadUrl, sharedInitMultipart,
+  getSharedItem, sharedPreviewUrl, sharedDownloadUrl, sharedUploadUrl, sharedInitMultipart,
   sharedPartUrl, sharedCompleteMultipart, sharedAbortMultipart,
   sharedDeleteFile, sharedMkdir,
 } from "../lib/api";
 import type { SharedItemResponse, FileEntry } from "../lib/api";
 import { PreviewModal, canPreview } from "./PreviewModal";
-import type { PreviewTarget } from "./PreviewModal";
+import type { PreviewEntry } from "./PreviewModal";
 import { ProgressBar } from "./ProgressBar";
 
 interface SharedItemViewProps {
@@ -84,7 +84,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const [subPrefix, setSubPrefix] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  const [preview, setPreview] = useState<{ entries: PreviewEntry[]; initialIndex: number } | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [newFolderMode, setNewFolderMode] = useState(false);
@@ -181,7 +181,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
     if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
     setDeletingKey(key);
     try {
-      await sharedDeleteFile(token, `${subPrefix}${key}`);
+      await sharedDeleteFile(token, key);
       void fetchContents(subPrefix);
     } catch {
       alert("Failed to delete");
@@ -218,7 +218,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Preview modal */}
-      {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
+      {preview && <PreviewModal entries={preview.entries} initialIndex={preview.initialIndex} onClose={() => setPreview(null)} />}
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-5">
         {/* Back link + header */}
@@ -364,7 +364,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                         <div className="flex-1 min-w-0">
                           {isDir ? (
                             <button
-                              onClick={() => setSubPrefix(`${subPrefix}${entry.key}`)}
+                              onClick={() => setSubPrefix(entry.key)}
                               className="text-sm text-slate-800 hover:text-blue-600 font-medium truncate block text-left transition-colors"
                             >
                               {name}
@@ -380,10 +380,18 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                         <div className="flex items-center gap-1.5 shrink-0">
                           {previewable && (
                             <button
-                              onClick={() => setPreview({
-                                key: entry.key,
-                                fetchUrl: () => sharedPreviewUrl(token, entry.key),
-                              })}
+                              onClick={() => {
+                                const fileEntries = entries.filter((e) => e.type === "file");
+                                const idx = fileEntries.findIndex((e) => e.key === entry.key);
+                                setPreview({
+                                  entries: fileEntries.map((e) => ({
+                                    key: e.key,
+                                    fetchUrl: () => sharedPreviewUrl(token, e.key),
+                                    fetchDownloadUrl: () => sharedDownloadUrl(token, e.key),
+                                  })),
+                                  initialIndex: Math.max(0, idx),
+                                });
+                              }}
                               title="Preview"
                               className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors rounded-md hover:bg-blue-50"
                             >
@@ -391,23 +399,16 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                             </button>
                           )}
                           {!isDir && (
-                            <a
-                              href={`/api/shared/${token}/preview-url`}
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                const { previewUrl } = await sharedPreviewUrl(token, entry.key).catch(() => ({ previewUrl: "" }));
-                                if (previewUrl) {
-                                  const a = document.createElement("a");
-                                  a.href = previewUrl;
-                                  a.download = name;
-                                  a.click();
-                                }
+                            <button
+                              onClick={async () => {
+                                const { url } = await sharedDownloadUrl(token, entry.key);
+                                window.open(url, "_blank", "noopener,noreferrer");
                               }}
                               title="Download"
                               className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors rounded-md hover:bg-slate-100"
                             >
                               <Download className="w-4 h-4" />
-                            </a>
+                            </button>
                           )}
                           {canDelete && (
                             <button
@@ -445,8 +446,12 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                 {canPreview(shareInfo.path) && (
                   <button
                     onClick={() => setPreview({
-                      key: shareInfo.path,
-                      fetchUrl: () => sharedPreviewUrl(token, ""),
+                      entries: [{
+                        key: shareInfo.path,
+                        fetchUrl: () => sharedPreviewUrl(token, ""),
+                        fetchDownloadUrl: () => sharedDownloadUrl(token, ""),
+                      }],
+                      initialIndex: 0,
                     })}
                     className="flex-1 flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium py-2.5 rounded-xl transition-colors"
                   >

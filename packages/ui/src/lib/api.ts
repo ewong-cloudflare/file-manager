@@ -214,12 +214,42 @@ export async function getSharedItem(token: string, subPrefix?: string): Promise<
   return apiFetch(`/shared/${token}${qs}`);
 }
 
-export async function getPreviewUrl(key: string): Promise<{ previewUrl: string }> {
+export const PREVIEW_IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
+export const PREVIEW_VIDEO_EXTS = ["mp4", "webm", "ogv"];
+export const PREVIEW_AUDIO_EXTS = ["mp3", "wav", "ogg", "m4a", "aac"];
+export const PREVIEW_PDF_EXTS = ["pdf"];
+export const PREVIEW_TEXT_EXTS = [
+  "txt", "md", "json", "csv", "xml", "yaml", "yml",
+  "js", "ts", "tsx", "jsx", "css", "html", "py", "sh", "go", "rs",
+];
+export const PREVIEWABLE_EXTENSIONS = [
+  ...PREVIEW_IMAGE_EXTS, ...PREVIEW_VIDEO_EXTS, ...PREVIEW_AUDIO_EXTS,
+  ...PREVIEW_PDF_EXTS, ...PREVIEW_TEXT_EXTS,
+];
+export function isPreviewable(fileName: string): boolean {
+  return PREVIEWABLE_EXTENSIONS.includes(fileName.split(".").pop()?.toLowerCase() ?? "");
+}
+export type PreviewType = "image" | "video" | "audio" | "pdf" | "text";
+export function getPreviewType(fileName: string): PreviewType | null {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (PREVIEW_IMAGE_EXTS.includes(ext)) return "image";
+  if (PREVIEW_VIDEO_EXTS.includes(ext)) return "video";
+  if (PREVIEW_AUDIO_EXTS.includes(ext)) return "audio";
+  if (PREVIEW_PDF_EXTS.includes(ext)) return "pdf";
+  if (PREVIEW_TEXT_EXTS.includes(ext)) return "text";
+  return null;
+}
+
+export async function getPreviewUrl(key: string): Promise<{ url: string }> {
   return apiFetch("/preview-url", { method: "POST", body: JSON.stringify({ key }) });
 }
 
-export async function sharedPreviewUrl(token: string, key: string): Promise<{ previewUrl: string }> {
+export async function sharedPreviewUrl(token: string, key: string): Promise<{ url: string }> {
   return apiFetch(`/shared/${token}/preview-url`, { method: "POST", body: JSON.stringify({ key }) });
+}
+
+export async function sharedDownloadUrl(token: string, key: string): Promise<{ url: string }> {
+  return apiFetch(`/shared/${token}/download-url`, { method: "POST", body: JSON.stringify({ key }) });
 }
 
 export async function sharedUploadUrl(token: string, key: string, contentType: string, size: number): Promise<{ url: string; key: string }> {

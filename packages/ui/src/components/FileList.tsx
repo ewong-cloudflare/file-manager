@@ -1,5 +1,7 @@
+import { useState } from "react";
 import {
   Download,
+  Eye,
   FileText,
   Image,
   Film,
@@ -10,13 +12,11 @@ import {
   Trash2,
   RefreshCw,
   Share2,
-  Eye,
 } from "lucide-react";
-import { useState } from "react";
+import { getPreviewUrl, getDownloadToken } from "../lib/api";
 import type { FileItem } from "../lib/api";
 import { PreviewModal, canPreview } from "./PreviewModal";
-import type { PreviewTarget } from "./PreviewModal";
-import { getPreviewUrl } from "../lib/api";
+import type { PreviewEntry } from "./PreviewModal";
 
 interface FileListProps {
   files: FileItem[];
@@ -80,141 +80,154 @@ export function FileList({
   downloadingKey,
   deletingKey,
 }: FileListProps) {
-  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  const [previewState, setPreviewState] = useState<{ entries: PreviewEntry[]; initialIndex: number } | null>(null);
 
   return (
     <>
-    {preview && <PreviewModal target={preview} onClose={() => setPreview(null)} />}
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-700">
-          Files &amp; Folders
-          {!loading && (
-            <span className="ml-2 text-xs font-normal text-slate-400">
-              {files.length} item{files.length !== 1 ? "s" : ""}
-            </span>
-          )}
-        </h2>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
+      {previewState && (
+        <PreviewModal entries={previewState.entries} initialIndex={previewState.initialIndex} onClose={() => setPreviewState(null)} />
+      )}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-700">
+            Files &amp; Folders
+            {!loading && (
+              <span className="ml-2 text-xs font-normal text-slate-400">
+                {files.length} item{files.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </h2>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
 
-      {loading ? (
-        <div className="divide-y divide-slate-50">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="px-5 py-4 flex items-center gap-3 animate-pulse">
-              <div className="w-4 h-4 bg-slate-200 rounded" />
-              <div className="flex-1 h-3 bg-slate-200 rounded" />
-              <div className="w-16 h-3 bg-slate-100 rounded" />
-              <div className="w-28 h-3 bg-slate-100 rounded" />
-              <div className="w-16 h-3 bg-slate-100 rounded" />
-            </div>
-          ))}
-        </div>
-      ) : files.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-          <Folder className="w-10 h-10 mb-3 opacity-30" />
-          <p className="text-sm">This folder is empty</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wide bg-slate-50">
-                <th className="px-5 py-3">Name</th>
-                <th className="px-5 py-3 text-right">Size</th>
-                <th className="px-5 py-3">Modified</th>
-                <th className="px-5 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {files.map((entry) => (
-                <tr
-                  key={entry.key}
-                  className="hover:bg-slate-50 transition-colors group"
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {fileIcon(entry)}
-                      {entry.type === "folder" ? (
+        {loading ? (
+          <div className="divide-y divide-slate-50">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="px-5 py-4 flex items-center gap-3 animate-pulse">
+                <div className="w-4 h-4 bg-slate-200 rounded" />
+                <div className="flex-1 h-3 bg-slate-200 rounded" />
+                <div className="w-16 h-3 bg-slate-100 rounded" />
+                <div className="w-28 h-3 bg-slate-100 rounded" />
+                <div className="w-16 h-3 bg-slate-100 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : files.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <Folder className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-sm">This folder is empty</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wide bg-slate-50">
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3 text-right">Size</th>
+                  <th className="px-5 py-3">Modified</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {files.map((entry) => (
+                  <tr
+                    key={entry.key}
+                    className="hover:bg-slate-50 transition-colors group"
+                  >
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {fileIcon(entry)}
+                        {entry.type === "folder" ? (
+                          <button
+                            onClick={() => onNavigate(entry.key)}
+                            className="truncate text-slate-700 font-medium hover:text-blue-600 transition-colors text-left"
+                            title={entry.key}
+                          >
+                            {displayName(entry.key)}
+                          </button>
+                        ) : (
+                          <span className="truncate text-slate-700 font-medium" title={entry.key}>
+                            {displayName(entry.key)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-slate-500 whitespace-nowrap tabular-nums">
+                      {entry.type === "folder" ? "—" : formatSize(entry.size ?? 0)}
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-400 whitespace-nowrap text-xs">
+                      {entry.lastModified ? formatDate(entry.lastModified) : "—"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => onNavigate(entry.key)}
-                          className="truncate text-slate-700 font-medium hover:text-blue-600 transition-colors text-left"
-                          title={entry.key}
-                        >
-                          {displayName(entry.key)}
-                        </button>
-                      ) : (
-                        <span className="truncate text-slate-700 font-medium" title={entry.key}>
-                          {displayName(entry.key)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-right text-slate-500 whitespace-nowrap tabular-nums">
-                    {entry.type === "folder" ? "—" : formatSize(entry.size ?? 0)}
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-400 whitespace-nowrap text-xs">
-                    {entry.lastModified ? formatDate(entry.lastModified) : "—"}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => onShare(entry.key, entry.type === "folder")}
-                        title="Share"
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Share</span>
-                      </button>
-                      {entry.type === "file" && canPreview(entry.key) && (
-                        <button
-                          onClick={() => setPreview({
-                            key: entry.key,
-                            fetchUrl: () => getPreviewUrl(entry.key),
-                          })}
-                          title="Preview"
+                          onClick={() => onShare(entry.key, entry.type === "folder")}
+                          title="Share"
                           className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
                         >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Preview</span>
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Share</span>
                         </button>
-                      )}
-                      {entry.type === "file" && (
+                        {entry.type === "file" && canPreview(entry.key) && (
+                          <button
+                            onClick={() => {
+                              const allFiles = files.filter((f) => f.type === "file");
+                              const idx = allFiles.findIndex((f) => f.key === entry.key);
+                              setPreviewState({
+                                entries: allFiles.map((f) => ({
+                                  key: f.key,
+                                  fetchUrl: () => getPreviewUrl(f.key),
+                                  fetchDownloadUrl: async () => {
+                                    const { tokenUrl } = await getDownloadToken(f.key);
+                                    return { url: tokenUrl };
+                                  },
+                                })),
+                                initialIndex: Math.max(0, idx),
+                              });
+                            }}
+                            title="Preview"
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Preview</span>
+                          </button>
+                        )}
+                        {entry.type === "file" && (
+                          <button
+                            onClick={() => onDownload(entry.key)}
+                            disabled={downloadingKey === entry.key}
+                            title="Generate one-time download link"
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            {downloadingKey === entry.key ? "…" : "Download"}
+                          </button>
+                        )}
                         <button
-                          onClick={() => onDownload(entry.key)}
-                          disabled={downloadingKey === entry.key}
-                          title="Generate one-time download link"
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                          onClick={() => onDelete(entry.key)}
+                          disabled={deletingKey === entry.key}
+                          title={entry.type === "folder" ? "Delete folder" : "Delete file"}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
                         >
-                          <Download className="w-3.5 h-3.5" />
-                          {downloadingKey === entry.key ? "…" : "Download"}
+                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingKey === entry.key ? "…" : "Delete"}
                         </button>
-                      )}
-                      <button
-                        onClick={() => onDelete(entry.key)}
-                        disabled={deletingKey === entry.key}
-                        title={entry.type === "folder" ? "Delete folder" : "Delete file"}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        {deletingKey === entry.key ? "…" : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </>
   );
 }

@@ -33,7 +33,17 @@ function FileManagerApp() {
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [currentPrefix, setCurrentPrefix] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("myfiles");
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const p = new URLSearchParams(window.location.search).get("tab");
+    return (p === "shared" ? "shared" : "myfiles") as Tab;
+  });
+
+  const switchTab = (tab: Tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    history.replaceState(null, "", url.toString());
+    setActiveTab(tab);
+  };
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [newFolderMode, setNewFolderMode] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -165,7 +175,7 @@ function FileManagerApp() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
         <div className="flex items-center gap-4 border-b border-slate-200 pb-0">
           <button
-            onClick={() => setActiveTab("myfiles")}
+            onClick={() => switchTab("myfiles")}
             className={`text-sm font-medium pb-3 border-b-2 transition-colors ${
               activeTab === "myfiles"
                 ? "border-blue-600 text-blue-600"
@@ -175,7 +185,7 @@ function FileManagerApp() {
             My Files
           </button>
           <button
-            onClick={() => setActiveTab("shared")}
+            onClick={() => switchTab("shared")}
             className={`text-sm font-medium pb-3 border-b-2 transition-colors ${
               activeTab === "shared"
                 ? "border-blue-600 text-blue-600"
