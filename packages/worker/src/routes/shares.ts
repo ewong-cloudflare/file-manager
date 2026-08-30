@@ -65,11 +65,23 @@ sharesRouter.post("/shares", async (c) => {
 
 sharesRouter.get("/shares", async (c) => {
   const user = c.get("user");
-  const rows = await c.env.DB.prepare(
-    "SELECT * FROM shares WHERE owner_email = ? ORDER BY created_at DESC"
-  )
-    .bind(user.email)
-    .all<ShareRow>();
+  const key = c.req.query("key");
+
+  let rows;
+  if (key) {
+    const r2Path = `${user.email}/${key}`;
+    rows = await c.env.DB.prepare(
+      "SELECT * FROM shares WHERE owner_email = ? AND path = ? ORDER BY created_at DESC"
+    )
+      .bind(user.email, r2Path)
+      .all<ShareRow>();
+  } else {
+    rows = await c.env.DB.prepare(
+      "SELECT * FROM shares WHERE owner_email = ? ORDER BY created_at DESC"
+    )
+      .bind(user.email)
+      .all<ShareRow>();
+  }
 
   return c.json({ shares: rows.results });
 });
@@ -83,6 +95,35 @@ sharesRouter.get("/shares/inbox", async (c) => {
     .all<ShareRow>();
 
   return c.json({ shares: rows.results });
+});
+
+sharesRouter.patch("/shares/:id", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = await c.req.json<{ permission?: string }>();
+  const { permission } = body;
+
+  const validPermissions = ["read", "read_write", "read_write_delete"];
+  if (!permission || !validPermissions.includes(permission)) {
+    return c.json({ error: "permission must be one of: read, read_write, read_write_delete" }, 400);
+  }
+
+  const share = await c.env.DB.prepare(
+    "SELECT owner_email FROM shares WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ owner_email: string }>();
+
+  if (!share) return c.json({ error: "Share not found" }, 404);
+  if (share.owner_email !== user.email) {
+    return c.json({ error: "Forbidden — only the owner can update a share" }, 403);
+  }
+
+  await c.env.DB.prepare("UPDATE shares SET permission = ? WHERE id = ?")
+    .bind(permission, id)
+    .run();
+
+  return c.json({ updated: id, permission });
 });
 
 sharesRouter.delete("/shares/:id", async (c) => {

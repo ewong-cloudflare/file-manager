@@ -190,6 +190,17 @@ export async function listMyShares(): Promise<{ shares: ShareRecord[] }> {
   return apiFetch("/shares");
 }
 
+export async function listSharesForPath(key: string): Promise<{ shares: ShareRecord[] }> {
+  return apiFetch(`/shares?key=${encodeURIComponent(key)}`);
+}
+
+export async function updateSharePermission(id: string, permission: string): Promise<void> {
+  await apiFetch(`/shares/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ permission }),
+  });
+}
+
 export async function listSharedWithMe(): Promise<{ shares: ShareRecord[] }> {
   return apiFetch("/shares/inbox");
 }
