@@ -77,27 +77,6 @@ filesRouter.post("/upload-url", async (c) => {
   return c.json({ url, key, expiresAt });
 });
 
-filesRouter.post("/preview-url", async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json<{ key?: string }>();
-  const { key } = body;
-  if (!key) return c.json({ error: "key is required" }, 400);
-
-  const r2Key = `${user.email}/${key}`;
-  const fileName = key.split("/").filter(Boolean).pop() ?? key;
-  const s3 = createS3Client(c.env);
-  const previewUrl = await getSignedUrl(
-    s3,
-    new GetObjectCommand({
-      Bucket: c.env.R2_BUCKET_NAME,
-      Key: r2Key,
-      ResponseContentDisposition: `inline; filename="${encodeURIComponent(fileName)}"`,
-    }),
-    { expiresIn: PRESIGN_EXPIRY_SECONDS }
-  );
-  return c.json({ previewUrl });
-});
-
 filesRouter.post("/mkdir", async (c) => {
   const user = c.get("user");
   const body = await c.req.json<{ prefix?: string; name?: string }>();

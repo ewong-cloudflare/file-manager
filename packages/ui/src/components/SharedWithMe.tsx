@@ -123,14 +123,17 @@ export function SharedWithMe({ onToast }: SharedWithMeProps) {
               {shares.map((share) => (
                 <tr key={share.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                   <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openShare(share)}
+                      className="flex items-center gap-2 text-left hover:text-blue-600 transition-colors group"
+                    >
                       {share.is_folder ? (
                         <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
                       ) : (
-                        <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                        <FileText className="w-4 h-4 text-slate-400 shrink-0 group-hover:text-blue-400" />
                       )}
-                      <span className="text-slate-700 truncate max-w-[160px]">{displayPath(share)}</span>
-                    </div>
+                      <span className="text-slate-700 group-hover:text-blue-600 truncate max-w-[160px]">{displayPath(share)}</span>
+                    </button>
                   </td>
                   <td className="px-3 py-3 hidden sm:table-cell text-slate-500 text-xs truncate max-w-[140px]">
                     {share.owner_email}

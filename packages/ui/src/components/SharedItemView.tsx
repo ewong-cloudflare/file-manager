@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Download, Folder, FileText, Loader2, AlertCircle, ArrowLeft,
   Eye, Trash2, UploadCloud, FolderPlus, ChevronRight, Home,
+  Users, ChevronDown, UserX, Plus,
 } from "lucide-react";
 import {
   getSharedItem, sharedPreviewUrl, sharedDownloadUrl, sharedUploadUrl, sharedInitMultipart,
   sharedPartUrl, sharedCompleteMultipart, sharedAbortMultipart,
-  sharedDeleteFile, sharedMkdir,
+  sharedDeleteFile, sharedMkdir, sharedListGrantees, sharedCreateShare, sharedRevokeGrantee,
 } from "../lib/api";
-import type { SharedItemResponse, FileEntry } from "../lib/api";
+import type { SharedItemResponse, FileEntry, ShareRecord } from "../lib/api";
 import { PreviewModal, canPreview } from "./PreviewModal";
 import type { PreviewEntry } from "./PreviewModal";
 import { ProgressBar } from "./ProgressBar";
@@ -21,6 +22,12 @@ const PERMISSION_LABELS: Record<string, string> = {
   read: "Read-only",
   read_write: "Read + Write",
   read_write_delete: "Full Access",
+};
+
+const PERMISSION_COLORS: Record<string, string> = {
+  read: "bg-slate-100 text-slate-600",
+  read_write: "bg-blue-50 text-blue-700",
+  read_write_delete: "bg-amber-50 text-amber-700",
 };
 
 const SINGLE_UPLOAD_THRESHOLD = 100 * 1024 * 1024;
@@ -92,6 +99,15 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── People with access ──
+  const [showGrantees, setShowGrantees] = useState(false);
+  const [grantees, setGrantees] = useState<ShareRecord[] | null>(null);
+  const [granteesLoading, setGranteesLoading] = useState(false);
+  const [addEmail, setAddEmail] = useState("");
+  const [addPerm, setAddPerm] = useState("read");
+  const [addingGrantee, setAddingGrantee] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   const fetchContents = useCallback(async (sp: string) => {
     setLoading(true);
     setError(null);
@@ -112,6 +128,7 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const perm = shareInfo?.permission ?? "read";
   const canWrite = perm === "read_write" || perm === "read_write_delete";
   const canDelete = perm === "read_write_delete";
+  const canShare = canDelete;
   const isFolder = shareInfo?.isFolder ?? false;
 
   // ── Breadcrumb ──
@@ -190,6 +207,40 @@ export function SharedItemView({ token }: SharedItemViewProps) {
     }
   }
 
+  // ── Grantees ──
+  const loadGrantees = useCallback(async () => {
+    setGranteesLoading(true);
+    try {
+      const { grantees: g } = await sharedListGrantees(token);
+      setGrantees(g);
+    } catch { /* ignore */ } finally {
+      setGranteesLoading(false);
+    }
+  }, [token]);
+
+  async function handleAddGrantee() {
+    const email = addEmail.trim();
+    if (!email) return;
+    setAddingGrantee(true);
+    try {
+      await sharedCreateShare(token, [email], addPerm);
+      setAddEmail("");
+      await loadGrantees();
+    } catch { /* ignore */ } finally {
+      setAddingGrantee(false);
+    }
+  }
+
+  async function handleRevokeGrantee(id: string) {
+    setRevokingId(id);
+    try {
+      await sharedRevokeGrantee(token, id);
+      setGrantees((g) => g?.filter((r) => r.id !== id) ?? null);
+    } catch { /* ignore */ } finally {
+      setRevokingId(null);
+    }
+  }
+
   // ── Create folder ──
   async function handleCreateFolder(e: React.FormEvent) {
     e.preventDefault();
@@ -215,6 +266,99 @@ export function SharedItemView({ token }: SharedItemViewProps) {
 
   const activeUploads = uploads.filter((u) => u.status === "uploading" || u.status === "error");
 
+  const granteePanel = canWrite && (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <button
+        onClick={() => {
+          const next = !showGrantees;
+          setShowGrantees(next);
+          if (next && grantees === null) void loadGrantees();
+        }}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-slate-500" />
+          <span className="text-sm font-medium text-slate-700">People with access</span>
+          {grantees !== null && (
+            <span className="bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">{grantees.length}</span>
+          )}
+        </div>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showGrantees ? "rotate-180" : ""}`} />
+      </button>
+
+      {showGrantees && (
+        <div className="border-t border-slate-100">
+          {granteesLoading ? (
+            <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+          ) : (
+            <div>
+              {grantees && grantees.length > 0 ? (
+                <div className="divide-y divide-slate-50">
+                  {grantees.map((g) => (
+                    <div key={g.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 truncate">{g.grantee_email}</p>
+                        <span className={`inline-block mt-0.5 text-xs px-1.5 py-0.5 rounded font-medium ${PERMISSION_COLORS[g.permission] ?? "bg-slate-100 text-slate-600"}`}>
+                          {PERMISSION_LABELS[g.permission] ?? g.permission}
+                        </span>
+                      </div>
+                      {canShare && (
+                        <button
+                          onClick={() => void handleRevokeGrantee(g.id)}
+                          disabled={revokingId === g.id}
+                          title="Remove access"
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors disabled:opacity-40"
+                        >
+                          {revokingId === g.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <UserX className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="px-5 py-6 text-sm text-slate-400 text-center">No other people have access</p>
+              )}
+              {canShare && (
+                <div className="border-t border-slate-100 p-4 space-y-2">
+                  <p className="text-xs font-medium text-slate-600">Add person</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={addEmail}
+                      onChange={(e) => setAddEmail(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") void handleAddGrantee(); }}
+                      placeholder="email@example.com"
+                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
+                    />
+                    <select
+                      value={addPerm}
+                      onChange={(e) => setAddPerm(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white shrink-0"
+                    >
+                      <option value="read">Read</option>
+                      <option value="read_write">Read + Write</option>
+                      <option value="read_write_delete">Full Access</option>
+                    </select>
+                    <button
+                      onClick={() => void handleAddGrantee()}
+                      disabled={addingGrantee || !addEmail.trim()}
+                      className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors shrink-0"
+                    >
+                      {addingGrantee ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Preview modal */}
@@ -223,8 +367,8 @@ export function SharedItemView({ token }: SharedItemViewProps) {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-5">
         {/* Back link + header */}
         <div className="flex items-start justify-between gap-4">
-          <a href="/" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors shrink-0 mt-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> My Files
+          <a href="/?tab=shared" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors shrink-0 mt-1">
+            <ArrowLeft className="w-3.5 h-3.5" /> Shared with me
           </a>
           {shareInfo && (
             <div className="text-right min-w-0">
@@ -427,49 +571,53 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                 </div>
               )}
             </div>
+            {granteePanel}
           </>
         ) : (
           /* Single-file share */
           shareInfo && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-5">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                  <FileText className="w-7 h-7 text-blue-400" />
+            <>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
+                    <FileText className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{displayName}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Shared by {shareInfo.ownerEmail}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{displayName}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Shared by {shareInfo.ownerEmail}</p>
-                </div>
-              </div>
 
-              <div className="flex gap-3">
-                {canPreview(shareInfo.path) && (
-                  <button
-                    onClick={() => setPreview({
-                      entries: [{
-                        key: shareInfo.path,
-                        fetchUrl: () => sharedPreviewUrl(token, ""),
-                        fetchDownloadUrl: () => sharedDownloadUrl(token, ""),
-                      }],
-                      initialIndex: 0,
-                    })}
-                    className="flex-1 flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium py-2.5 rounded-xl transition-colors"
-                  >
-                    <Eye className="w-4 h-4" /> Preview
-                  </button>
-                )}
-                {downloadUrl && (
-                  <a
-                    href={downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors"
-                  >
-                    <Download className="w-4 h-4" /> Download
-                  </a>
-                )}
+                <div className="flex gap-3">
+                  {canPreview(shareInfo.path) && (
+                    <button
+                      onClick={() => setPreview({
+                        entries: [{
+                          key: shareInfo.path,
+                          fetchUrl: () => sharedPreviewUrl(token, ""),
+                          fetchDownloadUrl: () => sharedDownloadUrl(token, ""),
+                        }],
+                        initialIndex: 0,
+                      })}
+                      className="flex-1 flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium py-2.5 rounded-xl transition-colors"
+                    >
+                      <Eye className="w-4 h-4" /> Preview
+                    </button>
+                  )}
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors"
+                    >
+                      <Download className="w-4 h-4" /> Download
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
+              {granteePanel}
+            </>
           )
         )}
       </div>

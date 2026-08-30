@@ -47,6 +47,8 @@ async function resolveShare(
     .bind(token, userEmail, userEmail)
     .first<ShareRow>();
   if (!share) return null;
+  // Owners always have full access regardless of the stored grantee permission
+  if (share.owner_email === userEmail) return share;
   if ((PERMISSION_RANK[share.permission] ?? -1) < (PERMISSION_RANK[minPermission] ?? 0)) return null;
   return share;
 }
@@ -195,6 +197,8 @@ sharesRouter.get("/shared/:token", async (c) => {
     return c.json({ error: "Share link not found, revoked, or not shared with your account" }, 404);
   }
 
+  const effectivePerm = share.owner_email === user.email ? "read_write_delete" : share.permission;
+
   if (share.is_folder) {
     const basePrefix = share.path.endsWith("/") ? share.path : `${share.path}/`;
     const listPrefix = `${basePrefix}${subPrefix}`;
@@ -221,7 +225,7 @@ sharesRouter.get("/shared/:token", async (c) => {
         ownerEmail: share.owner_email,
         path: share.path,
         isFolder: true,
-        permission: share.permission,
+        permission: effectivePerm,
       },
       entries: [...folders, ...files],
     });
@@ -245,7 +249,7 @@ sharesRouter.get("/shared/:token", async (c) => {
       ownerEmail: share.owner_email,
       path: share.path,
       isFolder: false,
-      permission: share.permission,
+      permission: effectivePerm,
     },
     downloadUrl,
   });
@@ -466,6 +470,71 @@ sharesRouter.post("/shared/:token/mkdir", async (c) => {
   await c.env.my_files.put(r2Key, new Uint8Array(0));
 
   return c.json({ created: `${prefix}${name}/` });
+});
+
+// ── List grantees (read_write+ required) ────────────────────────────────────
+sharesRouter.get("/shared/:token/grantees", async (c) => {
+  const user = c.get("user");
+  const token = c.req.param("token");
+
+  const share = await resolveShare(token, user.email, "read_write", c.env.DB);
+  if (!share) return c.json({ error: "Not found or insufficient permission" }, 403);
+
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM shares WHERE owner_email = ? AND path = ? AND is_folder = ? ORDER BY created_at DESC"
+  ).bind(share.owner_email, share.path, share.is_folder).all<ShareRow>();
+
+  return c.json({ grantees: rows.results });
+});
+
+// ── Create sub-share (full-access required) ───────────────────────────────────
+sharesRouter.post("/shared/:token/share", async (c) => {
+  const user = c.get("user");
+  const token = c.req.param("token");
+  const body = await c.req.json<{ granteeEmails?: string[]; permission?: string }>();
+  const { granteeEmails, permission } = body;
+
+  if (!Array.isArray(granteeEmails) || granteeEmails.length === 0 || !permission) {
+    return c.json({ error: "granteeEmails and permission are required" }, 400);
+  }
+  const validPermissions = ["read", "read_write", "read_write_delete"];
+  if (!validPermissions.includes(permission)) {
+    return c.json({ error: "Invalid permission" }, 400);
+  }
+
+  const share = await resolveShare(token, user.email, "read_write_delete", c.env.DB);
+  if (!share) return c.json({ error: "Not found or insufficient permission" }, 403);
+
+  const now = Date.now();
+  const linkToken = crypto.randomUUID();
+  const stmt = c.env.DB.prepare(
+    "INSERT INTO shares (id, owner_email, path, is_folder, permission, grantee_email, link_token, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  );
+  const rows = granteeEmails.map((email) =>
+    stmt.bind(crypto.randomUUID(), share.owner_email, share.path, share.is_folder, permission, email, linkToken, now)
+  );
+  await c.env.DB.batch(rows);
+
+  return c.json({ linkToken, granteeEmails });
+});
+
+// ── Revoke a grantee (full-access required) ───────────────────────────────────
+sharesRouter.delete("/shared/:token/grantee/:granteeId", async (c) => {
+  const user = c.get("user");
+  const token = c.req.param("token");
+  const granteeId = c.req.param("granteeId");
+
+  const share = await resolveShare(token, user.email, "read_write_delete", c.env.DB);
+  if (!share) return c.json({ error: "Not found or insufficient permission" }, 403);
+
+  const row = await c.env.DB.prepare(
+    "SELECT id FROM shares WHERE id = ? AND owner_email = ? AND path = ?"
+  ).bind(granteeId, share.owner_email, share.path).first<{ id: string }>();
+
+  if (!row) return c.json({ error: "Grantee not found" }, 404);
+
+  await c.env.DB.prepare("DELETE FROM shares WHERE id = ?").bind(granteeId).run();
+  return c.json({ revoked: granteeId });
 });
 
 // ── Delete file inside shared folder (full-access only) ───────────────────────

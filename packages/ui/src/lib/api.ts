@@ -283,3 +283,15 @@ export async function sharedDeleteFile(token: string, key: string): Promise<void
 export async function sharedMkdir(token: string, prefix: string, name: string): Promise<{ created: string }> {
   return apiFetch(`/shared/${token}/mkdir`, { method: "POST", body: JSON.stringify({ prefix, name }) });
 }
+
+export async function sharedListGrantees(token: string): Promise<{ grantees: ShareRecord[] }> {
+  return apiFetch(`/shared/${token}/grantees`);
+}
+
+export async function sharedCreateShare(token: string, granteeEmails: string[], permission: string): Promise<{ linkToken: string; granteeEmails: string[] }> {
+  return apiFetch(`/shared/${token}/share`, { method: "POST", body: JSON.stringify({ granteeEmails, permission }) });
+}
+
+export async function sharedRevokeGrantee(token: string, granteeId: string): Promise<void> {
+  await apiFetch(`/shared/${token}/grantee/${encodeURIComponent(granteeId)}`, { method: "DELETE" });
+}

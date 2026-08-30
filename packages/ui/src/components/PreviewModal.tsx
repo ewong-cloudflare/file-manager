@@ -14,7 +14,7 @@ interface PreviewModalProps {
 }
 
 const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico"]);
-const VIDEO_EXTS = new Set(["mp4", "webm", "ogv"]);
+const VIDEO_EXTS = new Set(["mp4", "webm", "ogv", "mov"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "m4a", "aac"]);
 const TEXT_EXTS = new Set([
   "txt", "md", "json", "csv", "xml", "yaml", "yml",
