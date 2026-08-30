@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, FileText, Eye, RefreshCw, Loader2, Inbox, ExternalLink } from "lucide-react";
 import { listSharedWithMe, sharedPreviewUrl, sharedDownloadUrl } from "../lib/api";
 import type { ShareRecord } from "../lib/api";
-import { PreviewModal, canPreview } from "./PreviewModal";
+import { PreviewModal } from "./PreviewModal";
 import type { PreviewEntry } from "./PreviewModal";
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -43,7 +43,11 @@ export function SharedWithMe({ onToast }: SharedWithMeProps) {
   }, [fetchShares]);
 
   function openShare(share: ShareRecord) {
-    window.location.href = `/shared/${share.link_token}`;
+    if (share.is_folder) {
+      window.location.href = `/shared/${share.link_token}`;
+    } else {
+      openPreview(share);
+    }
   }
 
   function openPreview(share: ShareRecord) {
@@ -55,10 +59,6 @@ export function SharedWithMe({ onToast }: SharedWithMeProps) {
       }],
       initialIndex: 0,
     });
-  }
-
-  function fileDisplayName(share: ShareRecord) {
-    return share.path.split("/").filter(Boolean).pop() ?? share.path;
   }
 
   function formatDate(ts: number) {
@@ -148,7 +148,15 @@ export function SharedWithMe({ onToast }: SharedWithMeProps) {
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-1.5">
-                      {!share.is_folder && canPreview(fileDisplayName(share)) && (
+                      {share.is_folder ? (
+                        <button
+                          onClick={() => openShare(share)}
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1.5 rounded-md font-medium transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Open</span>
+                        </button>
+                      ) : (
                         <button
                           onClick={() => openPreview(share)}
                           title="Preview"
@@ -158,13 +166,6 @@ export function SharedWithMe({ onToast }: SharedWithMeProps) {
                           <span className="hidden sm:inline">Preview</span>
                         </button>
                       )}
-                      <button
-                        onClick={() => openShare(share)}
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1.5 rounded-md font-medium transition-colors"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{share.is_folder ? "Open" : "Open"}</span>
-                      </button>
                     </div>
                   </td>
                 </tr>
