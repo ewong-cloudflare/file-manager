@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { UploadCloud } from "lucide-react";
+import { UploadCloud, ChevronDown } from "lucide-react";
 import {
   getUploadUrl,
   initMultipart,
@@ -160,6 +160,12 @@ async function uploadMultipart(
   onProgress(100);
 }
 
+// ── Ignore system files ──
+
+function shouldIgnore(name: string): boolean {
+  return name === ".DS_Store" || name.startsWith("._") || name === "Thumbs.db" || name === "desktop.ini";
+}
+
 // ── Folder traversal helpers ──
 
 async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
@@ -179,7 +185,7 @@ async function traverseEntry(
 ): Promise<void> {
   if (entry.isFile) {
     const file = await new Promise<File>((res, rej) => (entry as FileSystemFileEntry).file(res, rej));
-    collected.push({ file, relativePath: pathPrefix + file.name });
+    if (!shouldIgnore(file.name)) collected.push({ file, relativePath: pathPrefix + file.name });
   } else if (entry.isDirectory) {
     const dirEntry = entry as FileSystemDirectoryEntry;
     const subPath = pathPrefix + dirEntry.name + "/";
@@ -213,10 +219,20 @@ export function UploadZone({
 }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const browseRef = useRef<HTMLDivElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState(false);
 
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, []);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (browseRef.current && !browseRef.current.contains(e.target as Node)) setBrowseOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
   function startUploads(items: Array<{ file: File; relativePath: string }>) {
@@ -245,10 +261,12 @@ export function UploadZone({
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files) return;
-    const items = Array.from(files).map((f) => ({
-      file: f,
-      relativePath: f.webkitRelativePath || f.name,
-    }));
+    const items = Array.from(files)
+      .filter((f) => !shouldIgnore(f.name))
+      .map((f) => ({
+        file: f,
+        relativePath: f.webkitRelativePath || f.name,
+      }));
     startUploads(items);
     e.target.value = "";
   }
@@ -282,13 +300,33 @@ export function UploadZone({
           <p className={`text-sm font-medium ${isDragActive ? "text-blue-600" : "text-slate-600"}`}>
             {isDragActive ? "Drop files or folders here" : "Drag & drop files or folders here"}
           </p>
-          <button
+          <div className="relative mt-2" ref={browseRef}>
+            <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              onClick={() => setBrowseOpen((v) => !v)}
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
             >
-              Browse
+              Browse <ChevronDown className="w-3 h-3" />
             </button>
+            {browseOpen && (
+              <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-10 min-w-[96px]">
+                <button
+                  type="button"
+                  onClick={() => { fileInputRef.current?.click(); setBrowseOpen(false); }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  Files
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { folderInputRef.current?.click(); setBrowseOpen(false); }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  Folder
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-1">
             Files ≤ 100 MB use direct upload · Larger files use multipart (100 MB parts, 3 parallel)
           </p>

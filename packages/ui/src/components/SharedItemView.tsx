@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Download, Folder, FileText, Loader2, AlertCircle, ArrowLeft,
-  Eye, Trash2, UploadCloud, FolderPlus, ChevronRight, Home,
+  Eye, Trash2, UploadCloud, FolderPlus, ChevronRight, ChevronDown, Home,
   Users, UserX, Plus, X,
 } from "lucide-react";
 import {
@@ -82,6 +82,12 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+// ── Ignore system files ──
+
+function shouldIgnore(name: string): boolean {
+  return name === ".DS_Store" || name.startsWith("._") || name === "Thumbs.db" || name === "desktop.ini";
+}
+
 // ── Folder traversal helpers ──
 
 async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
@@ -101,7 +107,7 @@ async function traverseEntry(
 ): Promise<void> {
   if (entry.isFile) {
     const file = await new Promise<File>((res, rej) => (entry as FileSystemFileEntry).file(res, rej));
-    collected.push({ file, relativePath: pathPrefix + file.name });
+    if (!shouldIgnore(file.name)) collected.push({ file, relativePath: pathPrefix + file.name });
   } else if (entry.isDirectory) {
     const dirEntry = entry as FileSystemDirectoryEntry;
     const subPath = pathPrefix + dirEntry.name + "/";
@@ -148,9 +154,19 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const browseRef = useRef<HTMLDivElement>(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
 
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, []);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (browseRef.current && !browseRef.current.contains(e.target as Node)) setBrowseOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
   // ── People with access ──
@@ -249,10 +265,12 @@ export function SharedItemView({ token }: SharedItemViewProps) {
 
   function handleFilePick(fileList: FileList | null) {
     if (!fileList) return;
-    const items = Array.from(fileList).map((f) => ({
-      file: f,
-      relativePath: f.webkitRelativePath || f.name,
-    }));
+    const items = Array.from(fileList)
+      .filter((f) => !shouldIgnore(f.name))
+      .map((f) => ({
+        file: f,
+        relativePath: f.webkitRelativePath || f.name,
+      }));
     handleUploadItems(items);
   }
 
@@ -537,13 +555,33 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                 >
                   <UploadCloud className="w-6 h-6 text-slate-400" />
                   <p className="text-sm text-slate-600 font-medium">Drop files or folders here</p>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                  >
-                    Browse
-                  </button>
+                  <div className="relative" ref={browseRef}>
+                    <button
+                      type="button"
+                      onClick={() => setBrowseOpen((v) => !v)}
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                    >
+                      Browse <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {browseOpen && (
+                      <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-10 min-w-[96px]">
+                        <button
+                          type="button"
+                          onClick={() => { fileInputRef.current?.click(); setBrowseOpen(false); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                        >
+                          Files
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { folderInputRef.current?.click(); setBrowseOpen(false); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                        >
+                          Folder
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}
