@@ -537,23 +537,13 @@ export function SharedItemView({ token }: SharedItemViewProps) {
                 >
                   <UploadCloud className="w-6 h-6 text-slate-400" />
                   <p className="text-sm text-slate-600 font-medium">Drop files or folders here</p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                    >
-                      Browse files
-                    </button>
-                    <span className="text-xs text-slate-300">·</span>
-                    <button
-                      type="button"
-                      onClick={() => folderInputRef.current?.click()}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-                    >
-                      Browse folder
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                  >
+                    Browse
+                  </button>
                 </div>
               </>
             )}

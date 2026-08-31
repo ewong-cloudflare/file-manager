@@ -282,23 +282,13 @@ export function UploadZone({
           <p className={`text-sm font-medium ${isDragActive ? "text-blue-600" : "text-slate-600"}`}>
             {isDragActive ? "Drop files or folders here" : "Drag & drop files or folders here"}
           </p>
-          <div className="flex items-center justify-center gap-2 mt-2">
-            <button
+          <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
             >
-              Browse files
+              Browse
             </button>
-            <span className="text-xs text-slate-300">·</span>
-            <button
-              type="button"
-              onClick={() => folderInputRef.current?.click()}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-            >
-              Browse folder
-            </button>
-          </div>
           <p className="text-xs text-slate-400 mt-1">
             Files ≤ 100 MB use direct upload · Larger files use multipart (100 MB parts, 3 parallel)
           </p>
