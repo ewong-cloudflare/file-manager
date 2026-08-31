@@ -82,6 +82,49 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+// ── Folder traversal helpers ──
+
+async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  const all: FileSystemEntry[] = [];
+  let batch: FileSystemEntry[];
+  do {
+    batch = await new Promise<FileSystemEntry[]>((res, rej) => reader.readEntries(res, rej));
+    all.push(...batch);
+  } while (batch.length > 0);
+  return all;
+}
+
+async function traverseEntry(
+  entry: FileSystemEntry,
+  pathPrefix: string,
+  collected: Array<{ file: File; relativePath: string }>
+): Promise<void> {
+  if (entry.isFile) {
+    const file = await new Promise<File>((res, rej) => (entry as FileSystemFileEntry).file(res, rej));
+    collected.push({ file, relativePath: pathPrefix + file.name });
+  } else if (entry.isDirectory) {
+    const dirEntry = entry as FileSystemDirectoryEntry;
+    const subPath = pathPrefix + dirEntry.name + "/";
+    const children = await readAllEntries(dirEntry.createReader());
+    for (const child of children) await traverseEntry(child, subPath, collected);
+  }
+}
+
+async function collectDropItems(dt: DataTransfer): Promise<Array<{ file: File; relativePath: string }>> {
+  const collected: Array<{ file: File; relativePath: string }> = [];
+  for (const item of Array.from(dt.items)) {
+    if (item.kind !== "file") continue;
+    const entry = item.webkitGetAsEntry();
+    if (entry) {
+      await traverseEntry(entry, "", collected);
+    } else {
+      const f = item.getAsFile();
+      if (f) collected.push({ file: f, relativePath: f.name });
+    }
+  }
+  return collected;
+}
+
 function formatSize(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -104,6 +147,11 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, []);
 
   // ── People with access ──
   const [showGrantees, setShowGrantees] = useState(false);
@@ -148,14 +196,13 @@ export function SharedItemView({ token }: SharedItemViewProps) {
   }
 
   // ── Upload ──
-  function handleFilePick(files: FileList | null) {
-    if (!files) return;
-    for (const file of Array.from(files)) {
+  function handleUploadItems(items: Array<{ file: File; relativePath: string }>) {
+    for (const { file, relativePath } of items) {
       const id = crypto.randomUUID();
-      const key = `${subPrefix}${file.name}`;
+      const key = `${subPrefix}${relativePath}`;
       const contentType = file.type || "application/octet-stream";
 
-      setUploads((prev) => [...prev, { id, name: file.name, size: file.size, progress: 0, status: "uploading" }]);
+      setUploads((prev) => [...prev, { id, name: relativePath, size: file.size, progress: 0, status: "uploading" }]);
 
       const run = file.size <= SINGLE_UPLOAD_THRESHOLD
         ? (async () => {
@@ -198,6 +245,21 @@ export function SharedItemView({ token }: SharedItemViewProps) {
           setUploads((p) => p.map((u) => u.id === id ? { ...u, status: "error", error: msg } : u));
         });
     }
+  }
+
+  function handleFilePick(fileList: FileList | null) {
+    if (!fileList) return;
+    const items = Array.from(fileList).map((f) => ({
+      file: f,
+      relativePath: f.webkitRelativePath || f.name,
+    }));
+    handleUploadItems(items);
+  }
+
+  async function handleDropFiles(e: React.DragEvent) {
+    e.preventDefault();
+    const collected = await collectDropItems(e.dataTransfer);
+    handleUploadItems(collected);
   }
 
   // ── Delete ──
@@ -467,14 +529,31 @@ export function SharedItemView({ token }: SharedItemViewProps) {
             {canWrite && (
               <>
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFilePick(e.target.files)} />
+                <input ref={folderInputRef} type="file" multiple className="hidden" onChange={(e) => handleFilePick(e.target.files)} />
                 <div
-                  className="flex flex-col items-center gap-2 p-8 rounded-xl border-2 border-dashed border-slate-300 bg-white hover:border-blue-300 hover:bg-slate-50 cursor-pointer transition-all"
-                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center gap-2 p-8 rounded-xl border-2 border-dashed border-slate-300 bg-white hover:border-blue-300 hover:bg-slate-50 transition-all"
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.preventDefault(); handleFilePick(e.dataTransfer.files); }}
+                  onDrop={(e) => void handleDropFiles(e)}
                 >
                   <UploadCloud className="w-6 h-6 text-slate-400" />
-                  <p className="text-sm text-slate-600 font-medium">Drop files or click to upload</p>
+                  <p className="text-sm text-slate-600 font-medium">Drop files or folders here</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                    >
+                      Browse files
+                    </button>
+                    <span className="text-xs text-slate-300">·</span>
+                    <button
+                      type="button"
+                      onClick={() => folderInputRef.current?.click()}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                    >
+                      Browse folder
+                    </button>
+                  </div>
                 </div>
               </>
             )}

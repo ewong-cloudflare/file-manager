@@ -1,5 +1,4 @@
-import { useCallback } from "react";
-import { useDropzone } from "react-dropzone";
+import { useEffect, useRef, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import {
   getUploadUrl,
@@ -104,10 +103,9 @@ async function withConcurrency<T>(
 
 async function uploadSingle(
   file: File,
-  prefix: string,
+  key: string,
   onProgress: (pct: number) => void
 ): Promise<void> {
-  const key = `${prefix}${file.name}`;
   const contentType = file.type || "application/octet-stream";
   const { url } = await getUploadUrl(key, contentType, file.size);
   await xhrPut(url, file, onProgress);
@@ -115,10 +113,9 @@ async function uploadSingle(
 
 async function uploadMultipart(
   file: File,
-  prefix: string,
+  key: string,
   onProgress: (pct: number) => void
 ): Promise<void> {
-  const key = `${prefix}${file.name}`;
   const contentType = file.type || "application/octet-stream";
   const numParts = Math.ceil(file.size / PART_SIZE);
 
@@ -163,6 +160,49 @@ async function uploadMultipart(
   onProgress(100);
 }
 
+// ── Folder traversal helpers ──
+
+async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  const all: FileSystemEntry[] = [];
+  let batch: FileSystemEntry[];
+  do {
+    batch = await new Promise<FileSystemEntry[]>((res, rej) => reader.readEntries(res, rej));
+    all.push(...batch);
+  } while (batch.length > 0);
+  return all;
+}
+
+async function traverseEntry(
+  entry: FileSystemEntry,
+  pathPrefix: string,
+  collected: Array<{ file: File; relativePath: string }>
+): Promise<void> {
+  if (entry.isFile) {
+    const file = await new Promise<File>((res, rej) => (entry as FileSystemFileEntry).file(res, rej));
+    collected.push({ file, relativePath: pathPrefix + file.name });
+  } else if (entry.isDirectory) {
+    const dirEntry = entry as FileSystemDirectoryEntry;
+    const subPath = pathPrefix + dirEntry.name + "/";
+    const children = await readAllEntries(dirEntry.createReader());
+    for (const child of children) await traverseEntry(child, subPath, collected);
+  }
+}
+
+async function collectDropItems(dt: DataTransfer): Promise<Array<{ file: File; relativePath: string }>> {
+  const collected: Array<{ file: File; relativePath: string }> = [];
+  for (const item of Array.from(dt.items)) {
+    if (item.kind !== "file") continue;
+    const entry = item.webkitGetAsEntry();
+    if (entry) {
+      await traverseEntry(entry, "", collected);
+    } else {
+      const f = item.getAsFile();
+      if (f) collected.push({ file: f, relativePath: f.name });
+    }
+  }
+  return collected;
+}
+
 export function UploadZone({
   uploads,
   currentPrefix,
@@ -171,45 +211,64 @@ export function UploadZone({
   onUploadComplete,
   onUploadError,
 }: UploadZoneProps) {
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      for (const file of acceptedFiles) {
-        const id = crypto.randomUUID();
-        onUploadStart(id, file.name, file.size);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
 
-        const run = file.size <= SINGLE_UPLOAD_THRESHOLD
-          ? uploadSingle(file, currentPrefix, (pct) => onUploadProgress(id, pct))
-          : uploadMultipart(file, currentPrefix, (pct) => onUploadProgress(id, pct));
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, []);
 
-        run
-          .then(() => onUploadComplete(id))
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : "Upload failed";
-            onUploadError(id, msg);
-          });
-      }
-    },
-    [currentPrefix, onUploadStart, onUploadProgress, onUploadComplete, onUploadError]
-  );
+  function startUploads(items: Array<{ file: File; relativePath: string }>) {
+    for (const { file, relativePath } of items) {
+      const id = crypto.randomUUID();
+      const key = `${currentPrefix}${relativePath}`;
+      onUploadStart(id, relativePath, file.size);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: true,
-  });
+      const run = file.size <= SINGLE_UPLOAD_THRESHOLD
+        ? uploadSingle(file, key, (pct) => onUploadProgress(id, pct))
+        : uploadMultipart(file, key, (pct) => onUploadProgress(id, pct));
+
+      run
+        .then(() => onUploadComplete(id))
+        .catch((err: unknown) => onUploadError(id, err instanceof Error ? err.message : "Upload failed"));
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragActive(false);
+    const collected = await collectDropItems(e.dataTransfer);
+    startUploads(collected);
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+    const items = Array.from(files).map((f) => ({
+      file: f,
+      relativePath: f.webkitRelativePath || f.name,
+    }));
+    startUploads(items);
+    e.target.value = "";
+  }
 
   const activeUploads = uploads.filter((u) => u.status === "uploading" || u.status === "error");
 
   return (
     <div className="space-y-3">
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleInputChange} />
+      <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleInputChange} />
       <div
-        {...getRootProps()}
-        className={`relative flex flex-col items-center justify-center gap-3 p-12 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200 ${
+        className={`relative flex flex-col items-center justify-center gap-3 p-12 rounded-xl border-2 border-dashed transition-all duration-200 ${
           isDragActive
             ? "border-blue-400 bg-blue-50"
             : "border-slate-300 bg-white hover:border-blue-300 hover:bg-slate-50"
         }`}
+        onDrop={(e) => void handleDrop(e)}
+        onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }}
+        onDragLeave={() => setIsDragActive(false)}
       >
-        <input {...getInputProps()} />
         <div
           className={`flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
             isDragActive ? "bg-blue-100" : "bg-slate-100"
@@ -221,8 +280,25 @@ export function UploadZone({
         </div>
         <div className="text-center">
           <p className={`text-sm font-medium ${isDragActive ? "text-blue-600" : "text-slate-600"}`}>
-            {isDragActive ? "Drop files here" : "Drag & drop files, or click to browse"}
+            {isDragActive ? "Drop files or folders here" : "Drag & drop files or folders here"}
           </p>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            >
+              Browse files
+            </button>
+            <span className="text-xs text-slate-300">·</span>
+            <button
+              type="button"
+              onClick={() => folderInputRef.current?.click()}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            >
+              Browse folder
+            </button>
+          </div>
           <p className="text-xs text-slate-400 mt-1">
             Files ≤ 100 MB use direct upload · Larger files use multipart (100 MB parts, 3 parallel)
           </p>
