@@ -1,0 +1,21 @@
+package-lock.json
+  s_cf04be9714ba43::t_b2165012dd7874 2442-2447,4836
+packages/worker/package.json
+  s_cf04be9714ba43::t_38cf7822a21701 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a7b11f70dbe2819acfd7197130a84f15796b5951",
+  "prompts": {},
+  "sessions": {
+    "s_cf04be9714ba43": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "bb22c27b-df44-4e12-b87b-5eb0495be925",
+        "model": "Claude Sonnet 4.6 Thinking"
+      },
+      "human_author": "ewong <ewong@cloudflare.com>"
+    }
+  }
+}
