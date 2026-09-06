@@ -3,11 +3,29 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-  CreateMultipartUploadCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
+import { AwsClient } from "aws4fetch";
 import { createS3Client } from "../lib/s3";
 import type { Env, UserContext } from "../types";
+
+function r2Endpoint(env: Env) {
+  return `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+}
+
+function makeAwsClient(env: Env) {
+  return new AwsClient({
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+    service: "s3",
+    region: "auto",
+  });
+}
+
+function extractXmlTag(xml: string, tag: string): string | null {
+  const m = xml.match(new RegExp(`<${tag}>([^<]*)<\\/${tag}>`));
+  return m ? m[1] : null;
+}
 
 type Variables = { user: UserContext };
 
@@ -27,16 +45,22 @@ multipartRouter.post("/multipart/init", async (c) => {
   }
 
   const r2Key = `${user.email}/${key}`;
-  const s3 = createS3Client(c.env);
   try {
-    const result = await s3.send(
-      new CreateMultipartUploadCommand({
-        Bucket: c.env.R2_BUCKET_NAME,
-        Key: r2Key,
-        ContentType: contentType,
-      })
-    );
-    return c.json({ uploadId: result.UploadId, key });
+    const aws = makeAwsClient(c.env);
+    const url = `${r2Endpoint(c.env)}/${c.env.R2_BUCKET_NAME}/${encodeURIComponent(r2Key)}?uploads`;
+    const res = await aws.fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": contentType },
+    });
+    const xml = await res.text();
+    if (!res.ok) {
+      return c.json({ error: `R2 error ${res.status}: ${xml}` }, 500);
+    }
+    const uploadId = extractXmlTag(xml, "UploadId");
+    if (!uploadId) {
+      return c.json({ error: `Could not parse UploadId from R2 response: ${xml}` }, 500);
+    }
+    return c.json({ uploadId, key });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Failed to init multipart upload: ${msg}` }, 500);
@@ -99,19 +123,21 @@ multipartRouter.post("/multipart/complete", async (c) => {
   }
 
   const r2Key = `${user.email}/${key}`;
-  const s3 = createS3Client(c.env);
   try {
-    const result = await s3.send(
-      new CompleteMultipartUploadCommand({
-        Bucket: c.env.R2_BUCKET_NAME,
-        Key: r2Key,
-        UploadId: uploadId,
-        MultipartUpload: {
-          Parts: parts.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
-        },
-      })
-    );
-    return c.json({ key, location: result.Location ?? null });
+    const aws = makeAwsClient(c.env);
+    const url = `${r2Endpoint(c.env)}/${c.env.R2_BUCKET_NAME}/${encodeURIComponent(r2Key)}?uploadId=${encodeURIComponent(uploadId!)}`;
+    const body = `<CompleteMultipartUpload>${parts.map((p) => `<Part><PartNumber>${p.PartNumber}</PartNumber><ETag>${p.ETag}</ETag></Part>`).join("")}</CompleteMultipartUpload>`;
+    const res = await aws.fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/xml" },
+      body,
+    });
+    const xml = await res.text();
+    if (!res.ok) {
+      return c.json({ error: `R2 error ${res.status}: ${xml}` }, 500);
+    }
+    const location = extractXmlTag(xml, "Location");
+    return c.json({ key, location });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Failed to complete multipart upload: ${msg}` }, 500);

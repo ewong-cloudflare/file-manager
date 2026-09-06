@@ -1,8 +1,3 @@
-import { DOMParser } from "@xmldom/xmldom";
-// AWS SDK v3 needs DOMParser to parse R2 XML responses; polyfill for Workers runtime
-// @ts-ignore
-if (typeof globalThis.DOMParser === "undefined") globalThis.DOMParser = DOMParser;
-
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authMiddleware } from "./middleware/auth";
