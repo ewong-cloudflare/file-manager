@@ -2,7 +2,7 @@
   "rules": [
     {
       "allowed": {
-        "origins": ["https://files.acmecorp.work"],
+        "origins": ["https://files.acmecorp.work", "https://files.thenakedtastebuds.com"],
         "methods": ["PUT", "GET"],
         "headers": ["Content-Type", "Content-Length", "x-amz-*"]
       },
