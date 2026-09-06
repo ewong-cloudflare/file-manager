@@ -28,15 +28,19 @@ multipartRouter.post("/multipart/init", async (c) => {
 
   const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
-  const result = await s3.send(
-    new CreateMultipartUploadCommand({
-      Bucket: c.env.R2_BUCKET_NAME,
-      Key: r2Key,
-      ContentType: contentType,
-    })
-  );
-
-  return c.json({ uploadId: result.UploadId, key });
+  try {
+    const result = await s3.send(
+      new CreateMultipartUploadCommand({
+        Bucket: c.env.R2_BUCKET_NAME,
+        Key: r2Key,
+        ContentType: contentType,
+      })
+    );
+    return c.json({ uploadId: result.UploadId, key });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to init multipart upload: ${msg}` }, 500);
+  }
 });
 
 multipartRouter.post("/multipart/part-url", async (c) => {
@@ -63,18 +67,22 @@ multipartRouter.post("/multipart/part-url", async (c) => {
 
   const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
-  const url = await getSignedUrl(
-    s3,
-    new UploadPartCommand({
-      Bucket: c.env.R2_BUCKET_NAME,
-      Key: r2Key,
-      UploadId: uploadId,
-      PartNumber: partNumber,
-    }),
-    { expiresIn: PART_PRESIGN_EXPIRY_SECONDS }
-  );
-
-  return c.json({ url, partNumber });
+  try {
+    const url = await getSignedUrl(
+      s3,
+      new UploadPartCommand({
+        Bucket: c.env.R2_BUCKET_NAME,
+        Key: r2Key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      }),
+      { expiresIn: PART_PRESIGN_EXPIRY_SECONDS }
+    );
+    return c.json({ url, partNumber });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to get part URL: ${msg}` }, 500);
+  }
 });
 
 multipartRouter.post("/multipart/complete", async (c) => {
@@ -92,18 +100,22 @@ multipartRouter.post("/multipart/complete", async (c) => {
 
   const r2Key = `${user.email}/${key}`;
   const s3 = createS3Client(c.env);
-  const result = await s3.send(
-    new CompleteMultipartUploadCommand({
-      Bucket: c.env.R2_BUCKET_NAME,
-      Key: r2Key,
-      UploadId: uploadId,
-      MultipartUpload: {
-        Parts: parts.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
-      },
-    })
-  );
-
-  return c.json({ key, location: result.Location ?? null });
+  try {
+    const result = await s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: c.env.R2_BUCKET_NAME,
+        Key: r2Key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
+        },
+      })
+    );
+    return c.json({ key, location: result.Location ?? null });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to complete multipart upload: ${msg}` }, 500);
+  }
 });
 
 multipartRouter.delete("/multipart/abort", async (c) => {
