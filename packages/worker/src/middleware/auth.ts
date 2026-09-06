@@ -33,8 +33,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
         name: (payload.name as string) ?? (payload.email as string) ?? "",
         sub: payload.sub ?? "",
       });
-    } catch {
-      return c.json({ error: "Unauthorized — invalid CF Access JWT" }, 401);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "Unauthorized — invalid CF Access JWT", reason }, 401);
     }
 
     await next();
