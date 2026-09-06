@@ -23,6 +23,26 @@ app.use(
   })
 );
 
+app.get("/api/debug-auth", (c) => {
+  const token = c.req.header("CF-Access-Jwt-Assertion") ?? "";
+  let jwtAud: unknown = null;
+  let jwtIss: unknown = null;
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      jwtAud = payload.aud;
+      jwtIss = payload.iss;
+    } catch { jwtAud = "decode-failed"; }
+  }
+  return c.json({
+    hasJwt: !!token,
+    jwtAud,
+    jwtIss,
+    configuredAud: c.env.CF_ACCESS_AUD ? c.env.CF_ACCESS_AUD.slice(0, 8) + "..." : "NOT SET",
+    configuredTeamDomain: c.env.CF_TEAM_DOMAIN || "NOT SET",
+  });
+});
+
 app.use("/api/*", authMiddleware);
 
 app.route("/api", meRouter);
