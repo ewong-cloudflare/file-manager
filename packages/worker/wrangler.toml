@@ -17,7 +17,7 @@ class_name = "DownloadTokenDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["DownloadTokenDO"]
+new_sqlite_classes = ["DownloadTokenDO"]
 
 [[d1_databases]]
 binding     = "DB"
