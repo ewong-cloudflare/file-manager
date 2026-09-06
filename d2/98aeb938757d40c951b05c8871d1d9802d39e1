@@ -1,0 +1,19 @@
+packages/worker/deploy.sh
+  s_cf04be9714ba43::t_6f751678133169 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d298aeb938757d40c951b05c8871d1d9802d39e1",
+  "prompts": {},
+  "sessions": {
+    "s_cf04be9714ba43": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "bb22c27b-df44-4e12-b87b-5eb0495be925",
+        "model": "Claude Sonnet 4.6 Thinking"
+      },
+      "human_author": "ewong <ewong@cloudflare.com>"
+    }
+  }
+}
