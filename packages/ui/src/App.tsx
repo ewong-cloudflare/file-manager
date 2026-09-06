@@ -196,8 +196,14 @@ function FileManagerApp() {
         await createFolder(currentPrefix, name);
         setNewFolderMode(false);
         setNewFolderName("");
-        void fetchFiles();
+        const newFolderKey = `${currentPrefix}${name}/`;
+        setFiles((prev) =>
+          prev.some((f) => f.key === newFolderKey)
+            ? prev
+            : [{ key: newFolderKey, type: "folder" }, ...prev]
+        );
         addToast(`Folder "${name}" created`, "success");
+        setTimeout(() => void fetchFiles(), 1500);
       } catch {
         addToast("Failed to create folder", "error");
       } finally {
