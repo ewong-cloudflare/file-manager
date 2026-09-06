@@ -22,7 +22,7 @@ new_classes = ["DownloadTokenDO"]
 [[d1_databases]]
 binding     = "DB"
 database_name = "file-manager-shares"
-database_id   = "04fb5893-dd4d-4697-af3f-ace5f4bc4304"
+database_id   = "__D1_DATABASE_ID__"
 
 [vars]
 ENVIRONMENT = "production"

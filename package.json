@@ -7,7 +7,7 @@
     "packages/ui"
   ],
   "scripts": {
-    "dev:worker": "npm run dev --workspace=packages/worker",
+    "dev:worker": "npm run dev --workspace=packages/worker -- --config wrangler.dev.toml",
     "dev:ui": "npm run dev --workspace=packages/ui",
     "build:ui": "npm run build --workspace=packages/ui",
     "deploy": "npm run build:ui && npm run deploy --workspace=packages/worker",
