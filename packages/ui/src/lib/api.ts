@@ -180,6 +180,13 @@ export async function createShare(
   });
 }
 
+export async function moveItems(keys: string[], destinationPrefix: string): Promise<void> {
+  await apiFetch("/files/move", {
+    method: "POST",
+    body: JSON.stringify({ keys, destinationPrefix }),
+  });
+}
+
 export async function createFolder(prefix: string, name: string): Promise<{ created: string }> {
   return apiFetch("/mkdir", {
     method: "POST",

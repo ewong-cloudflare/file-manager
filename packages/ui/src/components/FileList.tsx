@@ -12,6 +12,8 @@ import {
   Trash2,
   RefreshCw,
   Share2,
+  FolderInput,
+  X,
 } from "lucide-react";
 import { getPreviewUrl, getDownloadToken } from "../lib/api";
 import type { FileItem } from "../lib/api";
@@ -26,6 +28,8 @@ interface FileListProps {
   onRefresh: () => void;
   onNavigate: (prefix: string) => void;
   onShare: (key: string, isFolder: boolean) => void;
+  onMove: (keys: string[]) => void;
+  onBulkDelete: (keys: string[]) => void;
   downloadingKey: string | null;
   deletingKey: string | null;
 }
@@ -77,10 +81,33 @@ export function FileList({
   onRefresh,
   onNavigate,
   onShare,
+  onMove,
+  onBulkDelete,
   downloadingKey,
   deletingKey,
 }: FileListProps) {
   const [previewState, setPreviewState] = useState<{ entries: PreviewEntry[]; initialIndex: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const allKeys = files.map((f) => f.key);
+  const allSelected = allKeys.length > 0 && allKeys.every((k) => selected.has(k));
+  const someSelected = selected.size > 0;
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(allKeys));
+  }
+
+  function toggleOne(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
 
   function openPreview(entry: FileItem) {
     const allFiles = files.filter((f) => f.type === "file");
@@ -123,6 +150,34 @@ export function FileList({
           </button>
         </div>
 
+        {someSelected && (
+          <div className="flex items-center gap-3 px-5 py-2.5 bg-blue-50 border-b border-blue-100">
+            <span className="text-xs font-medium text-blue-700">
+              {selected.size} selected
+            </span>
+            <button
+              onClick={() => { onMove(Array.from(selected)); }}
+              className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-100 px-2.5 py-1.5 rounded-md transition-colors"
+            >
+              <FolderInput className="w-3.5 h-3.5" />
+              Move to…
+            </button>
+            <button
+              onClick={() => { onBulkDelete(Array.from(selected)); clearSelection(); }}
+              className="flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded-md transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+            <button
+              onClick={clearSelection}
+              className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="divide-y divide-slate-50">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -145,7 +200,15 @@ export function FileList({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wide bg-slate-50">
-                  <th className="px-5 py-3">Name</th>
+                  <th className="pl-4 pr-2 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-3">Name</th>
                   <th className="px-5 py-3 text-right">Size</th>
                   <th className="px-5 py-3">Modified</th>
                   <th className="px-5 py-3 text-right">Actions</th>
@@ -155,9 +218,17 @@ export function FileList({
                 {files.map((entry) => (
                   <tr
                     key={entry.key}
-                    className="hover:bg-slate-50 transition-colors group"
+                    className={`hover:bg-slate-50 transition-colors group ${selected.has(entry.key) ? "bg-blue-50/60" : ""}`}
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="pl-4 pr-2 py-3.5 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(entry.key)}
+                        onChange={() => toggleOne(entry.key)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-3 py-3.5">
                       <div className="flex items-center gap-2.5 min-w-0">
                         {fileIcon(entry)}
                         {entry.type === "folder" ? (

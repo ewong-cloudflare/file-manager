@@ -118,6 +118,57 @@ filesRouter.post("/preview-url", async (c) => {
   return c.json({ url });
 });
 
+filesRouter.post("/files/move", async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json<{ keys?: string[]; destinationPrefix?: string }>();
+  const { keys, destinationPrefix } = body;
+
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return c.json({ error: "keys must be a non-empty array" }, 400);
+  }
+  if (typeof destinationPrefix !== "string") {
+    return c.json({ error: "destinationPrefix is required" }, 400);
+  }
+
+  const userBase = `${user.email}/`;
+  const destR2Prefix = `${userBase}${destinationPrefix}`;
+
+  for (const key of keys) {
+    const srcR2Key = `${userBase}${key}`;
+
+    if (key.endsWith("/")) {
+      const folderName = key.replace(/\/$/, "").split("/").pop()!;
+      const dstR2Prefix = `${destR2Prefix}${folderName}/`;
+      let cursor: string | undefined;
+      do {
+        const list = await c.env.my_files.list({ prefix: srcR2Key, cursor });
+        for (const obj of list.objects) {
+          const rel = obj.key.slice(srcR2Key.length);
+          const newKey = `${dstR2Prefix}${rel}`;
+          const object = await c.env.my_files.get(obj.key);
+          if (object) {
+            await c.env.my_files.put(newKey, object.body, { httpMetadata: object.httpMetadata });
+            await c.env.my_files.delete(obj.key);
+          }
+        }
+        cursor = list.truncated ? list.cursor : undefined;
+      } while (cursor);
+    } else {
+      const filename = key.split("/").pop()!;
+      const dstR2Key = `${destR2Prefix}${filename}`;
+      if (srcR2Key !== dstR2Key) {
+        const object = await c.env.my_files.get(srcR2Key);
+        if (object) {
+          await c.env.my_files.put(dstR2Key, object.body, { httpMetadata: object.httpMetadata });
+          await c.env.my_files.delete(srcR2Key);
+        }
+      }
+    }
+  }
+
+  return c.json({ moved: keys.length });
+});
+
 filesRouter.delete("/files", async (c) => {
   const user = c.get("user");
   const key = c.req.query("key");

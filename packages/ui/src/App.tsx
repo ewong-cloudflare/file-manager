@@ -7,7 +7,8 @@ import { Breadcrumb } from "./components/Breadcrumb";
 import { ShareModal } from "./components/ShareModal";
 import { SharedWithMe } from "./components/SharedWithMe";
 import { SharedItemView } from "./components/SharedItemView";
-import { getDownloadToken, deleteFile, listFiles, getMe, createFolder } from "./lib/api";
+import { MoveModal } from "./components/MoveModal";
+import { getDownloadToken, deleteFile, listFiles, getMe, createFolder, moveItems } from "./lib/api";
 import type { FileItem, UserInfo } from "./lib/api";
 import type { UploadItem } from "./components/UploadZone";
 
@@ -45,6 +46,8 @@ function FileManagerApp() {
     setActiveTab(tab);
   };
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [moveKeys, setMoveKeys] = useState<string[] | null>(null);
+  const [moving, setMoving] = useState(false);
   const [newFolderMode, setNewFolderMode] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -146,6 +149,42 @@ function FileManagerApp() {
   const handleShare = useCallback((key: string, isFolder: boolean) => {
     setShareTarget({ key, isFolder });
   }, []);
+
+  const handleMove = useCallback((keys: string[]) => {
+    setMoveKeys(keys);
+  }, []);
+
+  const handleMoveConfirm = useCallback(
+    async (destinationPrefix: string) => {
+      if (!moveKeys) return;
+      setMoving(true);
+      try {
+        await moveItems(moveKeys, destinationPrefix);
+        addToast(`Moved ${moveKeys.length} item${moveKeys.length !== 1 ? "s" : ""} successfully`, "success");
+        setMoveKeys(null);
+        void fetchFiles();
+      } catch {
+        addToast("Failed to move items", "error");
+      } finally {
+        setMoving(false);
+      }
+    },
+    [moveKeys, fetchFiles, addToast]
+  );
+
+  const handleBulkDelete = useCallback(
+    async (keys: string[]) => {
+      if (!window.confirm(`Delete ${keys.length} item${keys.length !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+      try {
+        await Promise.all(keys.map((k) => deleteFile(k)));
+        addToast(`Deleted ${keys.length} item${keys.length !== 1 ? "s" : ""}`, "success");
+        void fetchFiles();
+      } catch {
+        addToast("Failed to delete some items", "error");
+      }
+    },
+    [fetchFiles, addToast]
+  );
 
   const handleCreateFolder = useCallback(
     async (e: React.FormEvent) => {
@@ -250,6 +289,8 @@ function FileManagerApp() {
               onRefresh={fetchFiles}
               onNavigate={handleNavigate}
               onShare={handleShare}
+              onMove={handleMove}
+              onBulkDelete={handleBulkDelete}
               downloadingKey={downloadingKey}
               deletingKey={deletingKey}
             />
@@ -258,6 +299,16 @@ function FileManagerApp() {
           <SharedWithMe onToast={addToast} />
         )}
       </main>
+
+      {moveKeys && (
+        <MoveModal
+          keys={moveKeys}
+          currentPrefix={currentPrefix}
+          onConfirm={handleMoveConfirm}
+          onClose={() => setMoveKeys(null)}
+          moving={moving}
+        />
+      )}
 
       {shareTarget && (
         <ShareModal
