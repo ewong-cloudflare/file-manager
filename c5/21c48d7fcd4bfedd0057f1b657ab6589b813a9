@@ -1,0 +1,19 @@
+packages/ui/tsconfig.app.tsbuildinfo
+  s_cf04be9714ba43::t_7490673e989a16 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c521c48d7fcd4bfedd0057f1b657ab6589b813a9",
+  "prompts": {},
+  "sessions": {
+    "s_cf04be9714ba43": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "bb22c27b-df44-4e12-b87b-5eb0495be925",
+        "model": "Claude Sonnet 4.6 Thinking"
+      },
+      "human_author": "ewong <ewong@cloudflare.com>"
+    }
+  }
+}
