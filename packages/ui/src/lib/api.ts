@@ -222,17 +222,38 @@ export async function getSharedItem(token: string, subPrefix?: string): Promise<
   return apiFetch(`/shared/${token}${qs}`);
 }
 
-export const PREVIEW_IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
-export const PREVIEW_VIDEO_EXTS = ["mp4", "webm", "ogv"];
-export const PREVIEW_AUDIO_EXTS = ["mp3", "wav", "ogg", "m4a", "aac"];
+export const PREVIEW_IMAGE_EXTS = [
+  "jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico",
+  "avif", "apng", "tiff", "tif", "heic", "heif",
+];
+export const PREVIEW_VIDEO_EXTS = [
+  "mp4", "webm", "ogv", "ogg", "mov", "m4v", "3gp", "mkv", "avi",
+];
+export const PREVIEW_AUDIO_EXTS = [
+  "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "weba", "aiff", "aif",
+];
 export const PREVIEW_PDF_EXTS = ["pdf"];
+export const PREVIEW_OFFICE_EXTS = [
+  "docx", "doc", "xlsx", "xls", "pptx", "ppt", "odt", "ods", "odp", "rtf",
+];
 export const PREVIEW_TEXT_EXTS = [
-  "txt", "md", "json", "csv", "xml", "yaml", "yml",
-  "js", "ts", "tsx", "jsx", "css", "html", "py", "sh", "go", "rs",
+  "txt", "md", "markdown", "rst", "tex", "adoc",
+  "json", "jsonl", "ndjson", "json5", "csv", "tsv",
+  "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties",
+  "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "sass", "less", "styl",
+  "html", "htm", "xhtml", "vue", "svelte", "astro",
+  "py", "pyi", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
+  "go", "rs", "c", "cpp", "h", "hpp", "java", "kt", "scala", "groovy",
+  "rb", "php", "lua", "pl", "r", "swift", "dart",
+  "ex", "exs", "erl", "zig", "nim", "elm", "ml", "fs", "clj", "hs",
+  "sql", "graphql", "gql", "proto", "tf", "hcl", "nix",
+  "log", "diff", "patch", "srt", "vtt",
+  "gitignore", "gitattributes", "editorconfig", "prettierrc", "eslintrc",
+  "makefile", "cmake", "lock",
 ];
 export const PREVIEWABLE_EXTENSIONS = [
   ...PREVIEW_IMAGE_EXTS, ...PREVIEW_VIDEO_EXTS, ...PREVIEW_AUDIO_EXTS,
-  ...PREVIEW_PDF_EXTS, ...PREVIEW_TEXT_EXTS,
+  ...PREVIEW_PDF_EXTS, ...PREVIEW_OFFICE_EXTS, ...PREVIEW_TEXT_EXTS,
 ];
 export function isPreviewable(fileName: string): boolean {
   return PREVIEWABLE_EXTENSIONS.includes(fileName.split(".").pop()?.toLowerCase() ?? "");

@@ -13,23 +13,89 @@ interface PreviewModalProps {
   onClose: () => void;
 }
 
-const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico"]);
-const VIDEO_EXTS = new Set(["mp4", "webm", "ogv", "mov"]);
-const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "m4a", "aac"]);
-const TEXT_EXTS = new Set([
-  "txt", "md", "json", "csv", "xml", "yaml", "yml",
-  "js", "ts", "tsx", "jsx", "css", "html", "py", "sh",
-  "go", "rs", "java", "c", "cpp", "h", "rb", "php",
+// All formats browsers can natively render (Chrome/Firefox/Safari modern)
+const IMAGE_EXTS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico",
+  "avif", "apng", "tiff", "tif", "heic", "heif",
 ]);
 
-type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "unsupported";
+const VIDEO_EXTS = new Set([
+  "mp4", "webm", "ogv", "ogg", "mov", "m4v", "3gp", "mkv", "avi",
+]);
+
+const AUDIO_EXTS = new Set([
+  "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "weba", "aiff", "aif",
+]);
+
+// Office formats — previewed via Microsoft Office Online viewer (no auth required, URL must be public/pre-signed)
+const OFFICE_EXTS = new Set([
+  "docx", "doc", "xlsx", "xls", "pptx", "ppt", "odt", "ods", "odp", "rtf",
+]);
+
+const TEXT_EXTS = new Set([
+  // Prose & docs
+  "txt", "md", "markdown", "rst", "tex", "adoc",
+  // Data / config
+  "json", "jsonl", "ndjson", "json5",
+  "csv", "tsv",
+  "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties",
+  // Web
+  "js", "mjs", "cjs", "ts", "tsx", "jsx",
+  "css", "scss", "sass", "less", "styl",
+  "html", "htm", "xhtml", "vue", "svelte", "astro",
+  // Systems & backend
+  "py", "pyi", "pyw",
+  "sh", "bash", "zsh", "fish", "ps1", "psm1", "bat", "cmd",
+  "go", "mod",
+  "rs",
+  "c", "cpp", "cc", "cxx", "h", "hpp", "hxx",
+  "java", "kt", "kts", "scala", "groovy", "gradle",
+  "rb", "erb",
+  "php",
+  "lua",
+  "pl", "pm",
+  "r",
+  "swift",
+  "m", "mm",
+  "dart",
+  "ex", "exs", "erl", "hrl",
+  "zig", "nim", "cr",
+  "elm", "ml", "mli", "fs", "fsx", "fsi",
+  "clj", "cljs", "cljc",
+  "hs", "lhs",
+  "vim", "vimrc",
+  // DB / query
+  "sql", "ddl", "dml",
+  // API / schema
+  "graphql", "gql", "proto",
+  // Infra / IaC
+  "tf", "tfvars", "hcl",
+  "nix", "dhall",
+  "dockerfile", "containerfile",
+  // CI / config files (no extension — matched below)
+  // Logs & diffs
+  "log", "diff", "patch",
+  // Misc
+  "gitignore", "gitattributes", "gitmodules",
+  "editorconfig", "prettierrc", "eslintrc", "babelrc",
+  "makefile", "cmake",
+  "lock",
+  "srt", "vtt",
+]);
+
+type PreviewKind = "image" | "video" | "audio" | "pdf" | "office" | "text" | "unsupported";
 
 export function previewKind(key: string): PreviewKind {
-  const ext = key.split(".").pop()?.toLowerCase() ?? "";
+  const filename = key.split("/").pop() ?? key;
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  // Extensionless files known to be text (Dockerfile, Makefile, etc.)
+  const noExt = ["dockerfile", "makefile", "gemfile", "rakefile", "procfile", "vagrantfile", "jenkinsfile"];
+  if (noExt.includes(filename.toLowerCase())) return "text";
   if (IMAGE_EXTS.has(ext)) return "image";
   if (VIDEO_EXTS.has(ext)) return "video";
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (ext === "pdf") return "pdf";
+  if (OFFICE_EXTS.has(ext)) return "office";
   if (TEXT_EXTS.has(ext)) return "text";
   return "unsupported";
 }
@@ -42,6 +108,7 @@ export function PreviewModal({ entries, initialIndex, onClose }: PreviewModalPro
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [url, setUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -53,6 +120,7 @@ export function PreviewModal({ entries, initialIndex, onClose }: PreviewModalPro
   const hasNext = currentIndex < entries.length - 1;
 
   useEffect(() => {
+    setImgError(false);
     if (!entry || kind === "unsupported") {
       setLoading(false);
       setUrl(null);
@@ -155,7 +223,7 @@ export function PreviewModal({ entries, initialIndex, onClose }: PreviewModalPro
               <Download className="w-3.5 h-3.5" />
               {downloading ? "…" : "Download"}
             </button>
-            {url && kind !== "unsupported" && (
+            {url && kind !== "unsupported" && kind !== "office" && (
               <a
                 href={url}
                 target="_blank"
@@ -203,7 +271,22 @@ export function PreviewModal({ entries, initialIndex, onClose }: PreviewModalPro
           ) : url ? (
             <>
               {kind === "image" && (
-                <img src={url} alt={fileName} className="max-w-full max-h-full object-contain p-4" />
+                imgError ? (
+                  <div className="flex flex-col items-center gap-4 p-8 text-center">
+                    <FileText className="w-14 h-14 text-slate-200" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-slate-600">Image cannot be displayed in this browser</p>
+                      <p className="text-xs text-slate-400">This format may require a different viewer</p>
+                    </div>
+                    <button onClick={() => void handleDownload()} disabled={downloading}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50">
+                      <Download className="w-4 h-4" />{downloading ? "Opening…" : "Download file"}
+                    </button>
+                  </div>
+                ) : (
+                  <img src={url} alt={fileName} onError={() => setImgError(true)}
+                    className="max-w-full max-h-full object-contain p-4" />
+                )
               )}
               {kind === "video" && (
                 <video src={url} controls className="max-w-full max-h-full" style={{ maxHeight: "calc(92vh - 60px)" }} />
@@ -215,6 +298,14 @@ export function PreviewModal({ entries, initialIndex, onClose }: PreviewModalPro
               )}
               {kind === "pdf" && (
                 <iframe src={url} title={fileName} className="w-full h-full border-0" style={{ minHeight: "600px" }} />
+              )}
+              {kind === "office" && (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`}
+                  title={fileName}
+                  className="w-full h-full border-0"
+                  style={{ minHeight: "600px" }}
+                />
               )}
               {kind === "text" && (
                 <pre className="w-full h-full p-6 text-xs text-slate-700 overflow-auto whitespace-pre-wrap font-mono leading-relaxed">
