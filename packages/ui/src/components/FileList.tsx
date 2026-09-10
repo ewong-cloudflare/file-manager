@@ -15,8 +15,8 @@ import {
   FolderInput,
   X,
 } from "lucide-react";
-import { getPreviewUrl, getDownloadToken } from "../lib/api";
-import type { FileItem } from "../lib/api";
+import { getPreviewUrl, getDownloadToken, PAGE_SIZE_OPTIONS } from "../lib/api";
+import type { FileItem, PageSize } from "../lib/api";
 import { PreviewModal, canPreview } from "./PreviewModal";
 import type { PreviewEntry } from "./PreviewModal";
 
@@ -32,6 +32,11 @@ interface FileListProps {
   onBulkDelete: (keys: string[]) => void;
   downloadingKey: string | null;
   deletingKey: string | null;
+  truncated: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  pageSize: PageSize;
+  onPageSizeChange: (size: PageSize) => void;
 }
 
 function fileIcon(entry: FileItem) {
@@ -85,6 +90,11 @@ export function FileList({
   onBulkDelete,
   downloadingKey,
   deletingKey,
+  truncated,
+  loadingMore,
+  onLoadMore,
+  pageSize,
+  onPageSizeChange,
 }: FileListProps) {
   const [previewState, setPreviewState] = useState<{ entries: PreviewEntry[]; initialIndex: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -140,14 +150,32 @@ export function FileList({
               </span>
             )}
           </h2>
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+              Show
+              <select
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value) as PageSize)}
+                disabled={loading}
+                className="border border-slate-200 rounded-md text-xs py-1 pl-2 pr-1 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              per page
+            </label>
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {someSelected && (
@@ -302,6 +330,18 @@ export function FileList({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && truncated && (
+          <div className="flex items-center justify-center py-3 border-t border-slate-100">
+            <button
+              onClick={onLoadMore}
+              disabled={loadingMore}
+              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
           </div>
         )}
       </div>

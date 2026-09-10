@@ -8,8 +8,8 @@ import { ShareModal } from "./components/ShareModal";
 import { SharedWithMe } from "./components/SharedWithMe";
 import { SharedItemView } from "./components/SharedItemView";
 import { MoveModal } from "./components/MoveModal";
-import { getDownloadToken, deleteFile, listFiles, getMe, createFolder, moveItems } from "./lib/api";
-import type { FileItem, UserInfo } from "./lib/api";
+import { getDownloadToken, deleteFile, listFiles, getMe, createFolder, moveItems, PAGE_SIZE_OPTIONS } from "./lib/api";
+import type { FileItem, UserInfo, PageSize } from "./lib/api";
 import type { UploadItem } from "./components/UploadZone";
 
 interface Toast {
@@ -29,6 +29,10 @@ function FileManagerApp() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
+  const [filesLoadingMore, setFilesLoadingMore] = useState(false);
+  const [filesCursor, setFilesCursor] = useState<string | null>(null);
+  const [filesTruncated, setFilesTruncated] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSize>(PAGE_SIZE_OPTIONS[0]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
@@ -69,14 +73,31 @@ function FileManagerApp() {
   const fetchFiles = useCallback(async () => {
     setFilesLoading(true);
     try {
-      const { entries } = await listFiles(currentPrefix);
+      const { entries, truncated, cursor } = await listFiles(currentPrefix, undefined, pageSize);
       setFiles(entries);
+      setFilesTruncated(truncated);
+      setFilesCursor(cursor);
     } catch {
       addToast("Failed to load file list", "error");
     } finally {
       setFilesLoading(false);
     }
-  }, [addToast, currentPrefix]);
+  }, [addToast, currentPrefix, pageSize]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!filesCursor) return;
+    setFilesLoadingMore(true);
+    try {
+      const { entries, truncated, cursor } = await listFiles(currentPrefix, filesCursor, pageSize);
+      setFiles((prev) => [...prev, ...entries]);
+      setFilesTruncated(truncated);
+      setFilesCursor(cursor);
+    } catch {
+      addToast("Failed to load more items", "error");
+    } finally {
+      setFilesLoadingMore(false);
+    }
+  }, [addToast, currentPrefix, filesCursor, pageSize]);
 
   useEffect(() => {
     void fetchFiles();
@@ -84,6 +105,10 @@ function FileManagerApp() {
 
   const handleNavigate = useCallback((prefix: string) => {
     setCurrentPrefix(prefix);
+  }, []);
+
+  const handlePageSizeChange = useCallback((size: PageSize) => {
+    setPageSize(size);
   }, []);
 
   const handleUploadStart = useCallback((id: string, name: string, size: number) => {
@@ -299,6 +324,11 @@ function FileManagerApp() {
               onBulkDelete={handleBulkDelete}
               downloadingKey={downloadingKey}
               deletingKey={deletingKey}
+              truncated={filesTruncated}
+              loadingMore={filesLoadingMore}
+              onLoadMore={handleLoadMore}
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
             />
           </>
         ) : (

@@ -8,6 +8,8 @@ type Variables = { user: UserContext };
 
 const SINGLE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const PRESIGN_EXPIRY_SECONDS = 1800; // 30 minutes
+const DEFAULT_LIST_LIMIT = 25;
+const ALLOWED_LIST_LIMITS = [25, 50, 100];
 
 export const filesRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -16,11 +18,14 @@ filesRouter.get("/files", async (c) => {
   const cursor = c.req.query("cursor") ?? undefined;
   const subPrefix = c.req.query("prefix") ?? "";
   const userPrefix = `${user.email}/${subPrefix}`;
+  const requestedLimit = Number(c.req.query("limit"));
+  const limit = ALLOWED_LIST_LIMITS.includes(requestedLimit) ? requestedLimit : DEFAULT_LIST_LIMIT;
 
   const list = await c.env.my_files.list({
     prefix: userPrefix,
     delimiter: "/",
     cursor,
+    limit,
   });
 
   const folders = (list.delimitedPrefixes ?? []).map((p) => ({

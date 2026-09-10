@@ -92,10 +92,18 @@ export async function getMe(): Promise<UserInfo> {
   return apiFetch("/me");
 }
 
-export async function listFiles(prefix = "", cursor?: string): Promise<{ entries: FileEntry[]; truncated: boolean; cursor: string | null }> {
+export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+
+export async function listFiles(
+  prefix = "",
+  cursor?: string,
+  limit: PageSize = 25
+): Promise<{ entries: FileEntry[]; truncated: boolean; cursor: string | null }> {
   const params = new URLSearchParams();
   if (prefix) params.set("prefix", prefix);
   if (cursor) params.set("cursor", cursor);
+  params.set("limit", String(limit));
   const qs = params.size ? `?${params.toString()}` : "";
   return apiFetch(`/files${qs}`);
 }
