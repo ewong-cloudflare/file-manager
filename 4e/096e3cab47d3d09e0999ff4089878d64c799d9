@@ -1,0 +1,25 @@
+packages/ui/src/App.tsx
+  s_3d8d9e7c40efeb::t_65b83ed2eaf2a0 11-12,32-35,76,78-79,85-100,110-113,327-331
+packages/ui/src/components/FileList.tsx
+  s_3d8d9e7c40efeb::t_70ff9de44e135f 18-19,35-39,93-97,153-178,335-346
+packages/ui/src/lib/api.ts
+  s_3d8d9e7c40efeb::t_0420ad9ad3b9a2 95-102,106
+packages/worker/src/routes/files.ts
+  s_3d8d9e7c40efeb::t_9c842db98f82c5 11-12,21-22,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4e096e3cab47d3d09e0999ff4089878d64c799d9",
+  "prompts": {},
+  "sessions": {
+    "s_3d8d9e7c40efeb": {
+      "agent_id": {
+        "tool": "devin",
+        "id": "s_3d8d9e7c40efeb",
+        "model": "unknown"
+      },
+      "human_author": "ewong <ewong@cloudflare.com>"
+    }
+  }
+}
